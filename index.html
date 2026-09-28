@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D&D Engine - Dev Workspace</title>
+    <style>
+        :root {
+            --bg-dark: #1e1e1e;
+            --bg-panel: #252526;
+            --bg-header: #333333;
+            --bg-input: #3c3c3c;
+            --border: #3e3e42;
+            --accent: #007acc;
+            --accent-hover: #1a8aee;
+            --text: #cccccc;
+            --text-dim: #888888;
+            --text-bright: #ffffff;
+            --green: #4ec9b0;
+            --orange: #ce9178;
+            --red: #f44747;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg-dark); color: var(--text); overflow: hidden; font-size: 13px; }
+        
+        /* TOP MENU BAR */
+        #menubar {
+            height: 30px; background: var(--bg-header); display: flex; align-items: center;
+            padding: 0 10px; border-bottom: 1px solid var(--border); user-select: none;
+        }
+        .menu-item { padding: 4px 10px; cursor: pointer; border-radius: 3px; font-size: 12px; }
+        .menu-item:hover { background: var(--accent); color: #fff; }
+        #menubar .logo { font-weight: bold; color: var(--accent); margin-right: 15px; }
+        #menubar .spacer { flex: 1; }
+        #menubar .mode-badge { background: var(--accent); color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+
+        /* MAIN LAYOUT */
+        #workspace { display: flex; height: calc(100vh - 30px); }
+
+        /* LEFT PANEL */
+        #left-panel {
+            width: 280px; background: var(--bg-panel); border-right: 1px solid var(--border);
+            display: flex; flex-direction: column; min-width: 200px;
+        }
+        .panel-header {
+            padding: 8px 12px; background: var(--bg-header); font-size: 11px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between;
+            align-items: center; border-bottom: 1px solid var(--border);
+        }
+        .panel-header button {
+            background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 14px;
+        }
+        .panel-header button:hover { color: var(--text-bright); }
+
+        /* TABS */
+        .tab-bar { display: flex; background: var(--bg-header); border-bottom: 1px solid var(--border); }
+        .tab {
+            flex: 1; padding: 6px; text-align: center; cursor: pointer; font-size: 11px;
+            border-bottom: 2px solid transparent; transition: 0.2s;
+        }
+        .tab:hover { background: var(--bg-input); }
+        .tab.active { border-bottom-color: var(--accent); color: var(--text-bright); }
+
+        /* SCROLLABLE CONTENT */
+        .panel-content { flex: 1; overflow-y: auto; padding: 4px 0; }
+        .panel-content::-webkit-scrollbar { width: 8px; }
+        .panel-content::-webkit-scrollbar-track { background: var(--bg-dark); }
+        .panel-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        /* TREE ITEMS */
+        .tree-item {
+            padding: 4px 12px; cursor: pointer; display: flex; align-items: center; gap: 6px;
+            font-size: 12px;
+        }
+        .tree-item:hover { background: var(--bg-input); }
+        .tree-item.selected { background: var(--accent); color: #fff; }
+        .tree-item .icon { width: 16px; text-align: center; font-size: 10px; }
+        .tree-item .name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .tree-item .toggle { width: 16px; text-align: center; font-size: 10px; color: var(--text-dim); }
+
+        /* CENTER VIEWPORT */
+        #viewport {
+            flex: 1; position: relative; background: #0d0d0d; overflow: hidden;
+        }
+        #viewport canvas { display: block; width: 100%; height: 100%; }
+        
+        /* Viewport Toolbar */
+        #vp-toolbar {
+            position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+            background: rgba(30,30,30,0.85); padding: 4px; border-radius: 6px;
+            display: flex; gap: 2px; backdrop-filter: blur(5px);
+        }
+        .vp-btn {
+            width: 32px; height: 28px; background: none; border: none; color: var(--text);
+            cursor: pointer; border-radius: 4px; font-size: 14px; display: flex; align-items: center; justify-content: center;
+        }
+        .vp-btn:hover { background: var(--bg-input); }
+        .vp-btn.active { background: var(--accent); color: #fff; }
+
+        /* Viewport Gizmo Info */
+        #vp-info {
+            position: absolute; bottom: 8px; left: 8px; font-size: 11px; color: var(--text-dim);
+            background: rgba(0,0,0,0.6); padding: 4px 8px; border-radius: 4px;
+        }
+
+        /* RIGHT PANEL */
+        #right-panel {
+            width: 300px; background: var(--bg-panel); border-left: 1px solid var(--border);
+            display: flex; flex-direction: column; min-width: 250px;
+        }
+
+        /* PROPERTY ROWS */
+        .prop-section { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+        .prop-section-title {
+            font-size: 11px; font-weight: 600; margin-bottom: 6px; color: var(--text-bright);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .prop-row { display: flex; align-items: center; margin-bottom: 4px; gap: 8px; }
+        .prop-label { width: 80px; font-size: 11px; color: var(--text-dim); flex-shrink: 0; }
+        .prop-input {
+            flex: 1; background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
+            padding: 3px 6px; border-radius: 3px; font-size: 12px;
+        }
+        .prop-input:focus { outline: none; border-color: var(--accent); }
+        .prop-input-xyz { display: flex; gap: 4px; flex: 1; }
+        .xyz-field { display: flex; align-items: center; flex: 1; }
+        .xyz-label { width: 14px; font-size: 10px; font-weight: bold; text-align: center; }
+        .xyz-label.x { color: #f44747; }
+        .xyz-label.y { color: #4ec9b0; }
+        .xyz-label.z { color: #4488ff; }
+        .xyz-input { width: 100%; background: var(--bg-input); border: 1px solid var(--border); color: var(--text); padding: 2px 4px; font-size: 11px; border-radius: 2px; }
+        .xyz-input:focus { outline: none; border-color: var(--accent); }
+
+        /* BOTTOM PANEL */
+        #bottom-panel {
+            height: 250px; background: var(--bg-panel); border-top: 1px solid var(--border);
+            display: flex; flex-direction: column; min-height: 150px;
+        }
+        .bottom-tabs { display: flex; background: var(--bg-header); border-bottom: 1px solid var(--border); }
+        .bottom-tab {
+            padding: 6px 14px; cursor: pointer; font-size: 11px; border-bottom: 2px solid transparent;
+        }
+        .bottom-tab:hover { background: var(--bg-input); }
+        .bottom-tab.active { border-bottom-color: var(--accent); color: var(--text-bright); }
+        .bottom-content { flex: 1; overflow: hidden; }
+        .bottom-page { display: none; height: 100%; overflow-y: auto; padding: 8px 12px; }
+        .bottom-page.active { display: block; }
+
+        /* ASSET GRID */
+        .asset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px; padding: 8px; }
+        .asset-card {
+            background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px;
+            padding: 8px; cursor: pointer; text-align: center; transition: 0.2s;
+        }
+        .asset-card:hover { border-color: var(--accent); background: #444; }
+        .asset-card.selected { border-color: var(--accent); background: #004a99; }
+        .asset-preview { width: 48px; height: 48px; margin: 0 auto 6px; background: var(--bg-dark); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .asset-name { font-size: 10px; color: var(--text); word-break: break-word; }
+
+        /* TIMELINE */
+        #timeline-page { padding: 0; display: none; flex-direction: column; height: 100%; }
+        #timeline-page.active { display: flex; }
+        .timeline-controls { display: flex; align-items: center; gap: 4px; padding: 6px 12px; background: var(--bg-header); border-bottom: 1px solid var(--border); }
+        .tl-btn { width: 24px; height: 24px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text); border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .tl-btn:hover { background: var(--accent); color: #fff; }
+        .tl-time { font-size: 12px; font-family: monospace; color: var(--text-bright); margin: 0 8px; }
+        .timeline-tracks { flex: 1; overflow-y: auto; padding: 8px; }
+        .track { display: flex; align-items: center; margin-bottom: 4px; }
+        .track-label { width: 100px; font-size: 11px; color: var(--text-dim); flex-shrink: 0; }
+        .track-bar { flex: 1; height: 24px; background: var(--bg-input); border-radius: 3px; position: relative; cursor: pointer; }
+        .track-key { position: absolute; width: 10px; height: 10px; background: var(--accent); border-radius: 50%; top: 50%; transform: translate(-50%, -50%); cursor: grab; }
+        .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--red); z-index: 10; pointer-events: none; }
+
+        /* PHYSICS DEBUG */
+        .phys-prop { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+        .phys-prop label { width: 100px; font-size: 11px; }
+        .phys-prop input[type="range"] { flex: 1; }
+        .phys-prop input[type="checkbox"] { accent-color: var(--accent); }
+        .phys-value { width: 40px; text-align: right; font-size: 11px; font-family: monospace; }
+
+        /* BUILD PALETTE */
+        .build-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 8px; }
+        .build-item {
+            background: var(--bg-input); border: 2px solid var(--border); border-radius: 6px;
+            padding: 10px 6px; cursor: pointer; text-align: center; transition: 0.2s;
+        }
+        .build-item:hover { border-color: var(--accent); }
+        .build-item.selected { border-color: var(--accent); background: #004a99; }
+        .build-item .icon { font-size: 24px; margin-bottom: 4px; }
+        .build-item .label { font-size: 10px; }
+
+        /* CONTEXT MENU */
+        .context-menu {
+            position: fixed; background: var(--bg-panel); border: 1px solid var(--border);
+            border-radius: 6px; padding: 4px 0; min-width: 180px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            z-index: 1000; display: none;
+        }
+        .context-menu.visible { display: block; }
+        .ctx-item { padding: 6px 16px; cursor: pointer; font-size: 12px; display: flex; justify-content: space-between; }
+        .ctx-item:hover { background: var(--accent); color: #fff; }
+        .ctx-sep { height: 1px; background: var(--border); margin: 4px 0; }
+
+        /* MODAL */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000;
+            display: none; align-items: center; justify-content: center;
+        }
+        .modal-overlay.visible { display: flex; }
+        .modal {
+            background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
+            width: 500px; max-height: 80vh; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+        }
+        .modal-header { padding: 12px 16px; background: var(--bg-header); font-weight: 600; display: flex; justify-content: space-between; }
+        .modal-body { padding: 16px; overflow-y: auto; max-height: 60vh; }
+        .modal-footer { padding: 12px 16px; background: var(--bg-header); display: flex; justify-content: flex-end; gap: 8px; }
+        .modal-btn { padding: 6px 16px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text); border-radius: 4px; cursor: pointer; }
+        .modal-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+        /* BONE HIERARCHY */
+        .bone-tree { padding: 4px 0; }
+        .bone-item { padding: 3px 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 12px; }
+        .bone-item:hover { background: var(--bg-input); }
+        .bone-item.selected { background: var(--accent); color: #fff; }
+        .bone-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--orange); }
+
+        /* STATUS BAR */
+        #statusbar {
+            height: 24px; background: var(--accent); display: flex; align-items: center;
+            padding: 0 10px; font-size: 11px; color: #fff; gap: 20px;
+        }
+        #statusbar .status-item { display: flex; align-items: center; gap: 4px; }
+        #statusbar .spacer { flex: 1; }
+
+        /* RESIZE HANDLES */
+        .resize-handle { position: absolute; z-index: 10; }
+        .resize-handle.h { width: 4px; cursor: col-resize; top: 0; bottom: 0; }
+        .resize-handle.v { height: 4px; cursor: row-resize; left: 0; right: 0; }
+    </style>
+</head>
+<body>
+    <!-- MENU BAR -->
+    <div id="menubar">
+        <span class="logo">D&D Engine</span>
+        <div class="menu-item" onclick="showModal('file')">File</div>
+        <div class="menu-item" onclick="showModal('edit')">Edit</div>
+        <div class="menu-item" onclick="showModal('view')">View</div>
+        <div class="menu-item" onclick="showModal('tools')">Tools</div>
+        <div class="menu-item" onclick="showModal('help')">Help</div>
+        <div class="spacer"></div>
+        <span class="mode-badge" id="mode-display">Editor Mode</span>
+    </div>
+
+    <!-- MAIN WORKSPACE -->
+    <div id="workspace">
+        <!-- LEFT PANEL -->
+        <div id="left-panel">
+            <div class="tab-bar">
+                <div class="tab active" data-tab="hierarchy" onclick="switchLeftTab('hierarchy')">Scene</div>
+                <div class="tab" data-tab="assets" onclick="switchLeftTab('assets')">Assets</div>
+                <div class="tab" data-tab="build" onclick="switchLeftTab('build')">Build</div>
+            </div>
+            
+            <!-- Scene Hierarchy -->
+            <div id="hierarchy-panel" class="panel-content">
+                <div class="panel-header">
+                    <span>Scene Hierarchy</span>
+                    <button onclick="addEmptyObject()" title="Add Empty">+</button>
+                </div>
+                <div id="hierarchy-list"></div>
+            </div>
+
+            <!-- Asset Manager -->
+            <div id="assets-panel" class="panel-content" style="display:none;">
+                <div class="panel-header">
+                    <span>Asset Library</span>
+                    <button onclick="showImportModal()" title="Import">+</button>
+                </div>
+                <div class="asset-grid" id="asset-grid"></div>
+            </div>
+
+            <!-- Build Palette -->
+            <div id="build-panel" class="panel-content" style="display:none;">
+                <div class="panel-header"><span>Map Builder</span></div>
+                <div class="build-grid" id="build-palette"></div>
+            </div>
+        </div>
+
+        <!-- CENTER VIEWPORT -->
+        <div id="viewport">
+            <div id="vp-toolbar">
+                <button class="vp-btn active" data-tool="select" title="Select (Q)" onclick="setTool('select')">◇</button>
+                <button class="vp-btn" data-tool="move" title="Move (W)" onclick="setTool('move')">✥</button>
+                <button class="vp-btn" data-tool="rotate" title="Rotate (E)" onclick="setTool('rotate')">↻</button>
+                <button class="vp-btn" data-tool="scale" title="Scale (R)" onclick="setTool('scale')">⤢</button>
+                <div style="width:1px;background:var(--border);margin:0 4px;"></div>
+                <button class="vp-btn" title="Toggle Grid" onclick="toggleGrid()">⊞</button>
+                <button class="vp-btn" title="Toggle Physics Debug" onclick="togglePhysicsDebug()">⚛</button>
+                <button class="vp-btn" title="Snap to Grid" onclick="toggleSnap()">⊡</button>
+            </div>
+            <div id="vp-info">Grid: 16x16 | Snap: ON</div>
+        </div>
+
+        <!-- RIGHT PANEL -->
+        <div id="right-panel">
+            <div class="panel-header"><span>Inspector</span></div>
+            <div class="panel-content" id="inspector-content">
+                <div style="padding: 20px; text-align: center; color: var(--text-dim);">
+                    Select an object to view properties
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOTTOM PANEL -->
+    <div id="bottom-panel">
+        <div class="bottom-tabs">
+            <div class="bottom-tab active" data-tab="console" onclick="switchBottomTab('console')">Console</div>
+            <div class="bottom-tab" data-tab="animation" onclick="switchBottomTab('animation')">Animation</div>
+            <div class="bottom-tab" data-tab="physics" onclick="switchBottomTab('physics')">Physics</div>
+            <div class="bottom-tab" data-tab="rigging" onclick="switchBottomTab('rigging')">Rigging</div>
+        </div>
+        <div class="bottom-content">
+            <!-- Console -->
+            <div id="console-page" class="bottom-page active">
+                <div id="console-output" style="font-family: monospace; font-size: 12px; color: var(--text);"></div>
+            </div>
+            
+            <!-- Animation Timeline -->
+            <div id="animation-page" class="bottom-page" style="padding:0; display:none; flex-direction:column; height:100%;">
+                <div class="timeline-controls">
+                    <button class="tl-btn" onclick="animFirst()">⏮</button>
+                    <button class="tl-btn" onclick="animPrev()">◀</button>
+                    <button class="tl-btn" id="play-btn" onclick="animTogglePlay()">▶</button>
+                    <button class="tl-btn" onclick="animNext()">▶</button>
+                    <button class="tl-btn" onclick="animLast()">⏭</button>
+                    <span class="tl-time" id="tl-time">00:00 / 00:30</span>
+                    <div class="spacer" style="flex:1"></div>
+                    <span style="font-size:11px; color: var(--text-dim)">FPS:</span>
+                    <input type="number" class="prop-input" style="width:50px;" value="24" id="tl-fps">
+                    <button class="tl-btn" onclick="addKeyframe()" title="Add Keyframe">◆</button>
+                </div>
+                <div class="timeline-tracks" id="timeline-tracks">
+                    <div style="padding: 20px; text-align: center; color: var(--text-dim);">
+                        Select an object to view animation tracks
+                    </div>
+                </div>
+            </div>
+
+            <!-- Physics Debugger -->
+            <div id="physics-page" class="bottom-page">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div>
+                        <div class="prop-section-title">World Settings</div>
+                        <div class="phys-prop">
+                            <label>Gravity Y</label>
+                            <input type="range" min="-50" max="0" value="-20" oninput="setGravity(this.value)">
+                            <span class="phys-value" id="grav-val">-20</span>
+                        </div>
+                        <div class="phys-prop">
+                            <label>Time Scale</label>
+                            <input type="range" min="0" max="3" step="0.1" value="1" oninput="setTimeScale(this.value)">
+                            <span class="phys-value" id="ts-val">1.0</span>
+                        </div>
+                        <div class="phys-prop">
+                            <label>Show Colliders</label>
+                            <input type="checkbox" checked onchange="toggleColliders(this.checked)">
+                        </div>
+                        <div class="phys-prop">
+                            <label>Show Centers</label>
+                            <input type="checkbox" onchange="toggleCenters(this.checked)">
+                        </div>
+                    </div>
+                    <div>
+                        <div class="prop-section-title">Selected Object Physics</div>
+                        <div class="prop-row">
+                            <span class="prop-label">Mass</span>
+                            <input type="number" class="prop-input" value="1" id="phys-mass">
+                        </div>
+                        <div class="prop-row">
+                            <span class="prop-label">Friction</span>
+                            <input type="range" min="0" max="1" step="0.05" value="0.5" id="phys-friction">
+                        </div>
+                        <div class="prop-row">
+                            <span class="prop-label">Bounciness</span>
+                            <input type="range" min="0" max="1" step="0.05" value="0" id="phys-bounce">
+                        </div>
+                        <div class="prop-row">
+                            <span class="prop-label">Collider</span>
+                            <select class="prop-input" id="phys-collider">
+                                <option>Box</option>
+                                <option>Sphere</option>
+                                <option>Capsule</option>
+                                <option>Mesh</option>
+                            </select>
+                        </div>
+                        <div class="phys-prop">
+                            <label>Is Trigger</label>
+                            <input type="checkbox" id="phys-trigger">
+                        </div>
+                        <div class="phys-prop">
+                            <label>Use Gravity</label>
+                            <input type="checkbox" checked id="phys-use-gravity">
+                        </div>
+                        <div class="phys-prop">
+                            <label>Is Kinematic</label>
+                            <input type="checkbox" id="phys-kinematic">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rigging -->
+            <div id="rigging-page" class="bottom-page" style="padding:0; display:none; flex-direction:column; height:100%;">
+                <div style="display:flex; height:100%;">
+                    <div style="width:200px; border-right: 1px solid var(--border); overflow-y:auto;">
+                        <div class="panel-header"><span>Bone Hierarchy</span><button onclick="addBone()">+</button></div>
+                        <div class="bone-tree" id="bone-tree"></div>
+                    </div>
+                    <div style="flex:1; overflow-y:auto; padding:12px;">
+                        <div class="prop-section-title">Bone Properties</div>
+                        <div id="bone-props">
+                            <div style="color: var(--text-dim); padding: 20px; text-align: center;">
+                                Select a bone to edit properties
+                            </div>
+                        </div>
+                        <div class="prop-section-title" style="margin-top: 12px;">Animation Preview</div>
+                        <div style="display:flex; gap:8px; padding: 8px;">
+                            <button class="tl-btn" onclick="playBoneAnim()">▶</button>
+                            <button class="tl-btn" onclick="stopBoneAnim()">⏹</button>
+                            <span style="font-size:11px; color: var(--text-dim); align-self:center;">Test animation on selected bone</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- STATUS BAR -->
+    <div id="statusbar">
+        <span class="status-item" id="status-fps">FPS: 60</span>
+        <span class="status-item" id="status-objects">Objects: 0</span>
+        <span class="status-item" id="status-triangles">Triangles: 0</span>
+        <span class="spacer"></span>
+        <span class="status-item">D&D Game Engine v0.1.0 - Dev Build</span>
+    </div>
+
+    <!-- CONTEXT MENU -->
+    <div class="context-menu" id="context-menu">
+        <div class="ctx-item" onclick="duplicateSelected()">Duplicate <span>Ctrl+D</span></div>
+        <div class="ctx-item" onclick="deleteSelected()">Delete <span>Del</span></div>
+        <div class="ctx-sep"></div>
+        <div class="ctx-item" onclick="focusSelected()">Focus <span>F</span></div>
+        <div class="ctx-item" onclick="renameSelected()">Rename <span>F2</span></div>
+        <div class="ctx-sep"></div>
+        <div class="ctx-item" onclick="addComponent()">Add Component...</div>
+    </div>
+
+    <!-- MODALS -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <span id="modal-title">Modal</span>
+                <button onclick="closeModal()" style="background:none;border:none;color:var(--text);cursor:pointer;font-size:16px;">×</button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+            <div class="modal-footer">
+                <button class="modal-btn" onclick="closeModal()">Cancel</button>
+                <button class="modal-btn primary" onclick="modalConfirm()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // ==========================================
+        // CORE ENGINE & SCENE MANAGEMENT
+        // ==========================================
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0d0d0d);
+        scene.fog = new THREE.Fog(0x0d0d0d, 30, 80);
+
+        const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+        camera.position.set(12, 10, 12);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.getElementById('viewport').appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.set(2048, 2048);
+        const d = 20;
+        dirLight.shadow.camera.left = -d;
+        dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d;
+        dirLight.shadow.camera.bottom = -d;
+        scene.add(dirLight);
+
+        const fillLight = new THREE.DirectionalLight(0x4488ff, 0.3);
+        fillLight.position.set(-10, 10, -10);
+        scene.add(fillLight);
+
+        // Grid
+        const gridHelper = new THREE.GridHelper(32, 32, 0x444444, 0x222222);
+        scene.add(gridHelper);
+
+        // Table surface
+        const tableGeo = new THREE.BoxGeometry(16, 0.2, 16);
+        const tableMat = new THREE.MeshStandardMaterial({ color: 0x654321, roughness: 0.8 });
+        const tableMesh = new THREE.Mesh(tableGeo, tableMat);
+        tableMesh.position.y = -0.1;
+        tableMesh.receiveShadow = true;
+        tableMesh.userData = { name: 'Table', type: 'environment', id: 'table' };
+        scene.add(tableMesh);
+
+        // ==========================================
+        // SCENE OBJECTS & STATE
+        // ==========================================
+        let sceneObjects = [tableMesh];
+        let selectedObject = null;
+        let currentTool = 'select';
+        let selectedBuildType = null;
+        let snapToGrid = true;
+        let showPhysics = false;
+        let gravity = -20;
+        let timeScale = 1;
+        let animPlaying = false;
+        let animTime = 0;
+        let selectedBone = null;
+
+        // Camera controls
+        let isOrbiting = false;
+        let isPanning = false;
+        let orbitStart = { x: 0, y: 0 };
+        let cameraTarget = new THREE.Vector3(0, 0, 0);
+        let cameraDistance = 18;
+        let cameraAngles = { theta: Math.PI / 4, phi: Math.PI / 4 };
+
+        // ==========================================
+        // GIZMOS
+        // ==========================================
+        const gizmoGroup = new THREE.Group();
+        scene.add(gizmoGroup);
+
+        function createGizmoArrows() {
+            while (gizmoGroup.children.length) gizmoGroup.remove(gizmoGroup.children[0]);
+            if (!selectedObject) return;
+
+            const size = 0.8;
+            const arrowLen = 1.5;
+
+            const colors = [0xf44747, 0x4ec9b0, 0x4488ff]; // X, Y, Z
+            const axes = [
+                new THREE.Vector3(1, 0, 0),
+                new THREE.Vector3(0, 1, 0),
+                new THREE.Vector3(0, 0, 1)
+            ];
+
+            axes.forEach((axis, i) => {
+                const arrow = new THREE.ArrowHelper(axis, new THREE.Vector3(), arrowLen, colors[i], 0.15, 0.08);
+                gizmoGroup.add(arrow);
+            });
+
+            gizmoGroup.position.copy(selectedObject.position);
+        }
+
+        // ==========================================
+        // BUILD PALETTE
+        // ==========================================
+        const buildItems = [
+            { type: 'wall', icon: '▬', label: 'Wall' },
+            { type: 'floor', icon: '▰', label: 'Floor Tile' },
+            { type: 'pillar', icon: '▮', label: 'Pillar' },
+            { type: 'ramp', icon: '▱', label: 'Ramp' },
+            { type: 'stairs', icon: '▤', label: 'Stairs' },
+            { type: 'door', icon: '▯', label: 'Door' },
+            { type: 'tree', icon: '🌲', label: 'Tree' },
+            { type: 'rock', icon: '🪨', label: 'Rock' },
+            { type: 'water', icon: '💧', label: 'Water' },
+            { type: 'bridge', icon: '🌉', label: 'Bridge' },
+            { type: 'fence', icon: '⊥', label: 'Fence' },
+            { type: 'chest', icon: '📦', label: 'Chest' },
+        ];
+
+        function initBuildPalette() {
+            const palette = document.getElementById('build-palette');
+            palette.innerHTML = '';
+            buildItems.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'build-item';
+                div.dataset.type = item.type;
+                div.innerHTML = `<div class="icon">${item.icon}</div><div class="label">${item.label}</div>`;
+                div.onclick = () => {
+                    document.querySelectorAll('.build-item').forEach(i => i.classList.remove('selected'));
+                    div.classList.add('selected');
+                    selectedBuildType = item.type;
+                    setTool('build');
+                };
+                palette.appendChild(div);
+            });
+        }
+
+        // ==========================================
+        // ASSET LIBRARY
+        // ==========================================
+        const assets = [
+            { name: 'Knight', type: 'figure', icon: '⚔️' },
+            { name: 'Mage', type: 'figure', icon: '🧙' },
+            { name: 'Dragon', type: 'figure', icon: '🐉' },
+            { name: 'Skeleton', type: 'figure', icon: '💀' },
+            { name: 'Goblin', type: 'figure', icon: '👺' },
+            { name: 'Wizard Tower', type: 'prop', icon: '🏰' },
+            { name: 'Tavern', type: 'prop', icon: '🏠' },
+            { name: 'Cave', type: 'prop', icon: '🕳️' },
+            { name: 'Fire Effect', type: 'vfx', icon: '🔥' },
+            { name: 'Magic Circle', type: 'vfx', icon: '✨' },
+            { name: 'Dice Set', type: 'tool', icon: '🎲' },
+            { name: 'Health Potion', type: 'item', icon: '🧪' },
+        ];
+
+        function initAssetGrid() {
+            const grid = document.getElementById('asset-grid');
+            grid.innerHTML = '';
+            assets.forEach(asset => {
+                const card = document.createElement('div');
+                card.className = 'asset-card';
+                card.innerHTML = `<div class="asset-preview">${asset.icon}</div><div class="asset-name">${asset.name}</div>`;
+                card.onclick = () => spawnFromAsset(asset);
+                grid.appendChild(card);
+            });
+        }
+
+        function spawnFromAsset(asset) {
+            if (asset.type === 'figure') {
+                spawnFigure(asset.name.toLowerCase());
+            } else if (asset.type === 'prop') {
+                spawnProp(asset.name.toLowerCase());
+            } else {
+                logConsole(`Spawned ${asset.name} placeholder`);
+            }
+        }
+
+        function spawnFigure(type) {
+            const group = new THREE.Group();
+            let color = 0xffffff;
+            let scale = 1;
+            if (type === 'knight') { color = 0x4488ff; scale = 1; }
+            else if (type === 'mage') { color = 0xaa44ff; scale = 0.9; }
+            else if (type === 'dragon') { color = 0xff4444; scale = 1.8; }
+            else if (type === 'skeleton') { color = 0xddddcc; scale = 0.95; }
+            else if (type === 'goblin') { color = 0x44aa44; scale = 0.7; }
+
+            // Body
+            const body = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.2 * scale, 0.25 * scale, 0.7 * scale, 12),
+                new THREE.MeshStandardMaterial({ color })
+            );
+            body.position.y = 0.35 * scale;
+            body.castShadow = true;
+            group.add(body);
+
+            // Head
+            const head = new THREE.Mesh(
+                new THREE.SphereGeometry(0.22 * scale, 12, 12),
+                new THREE.MeshStandardMaterial({ color: 0xffccaa })
+            );
+            head.position.y = 0.85 * scale;
+            head.castShadow = true;
+            group.add(head);
+
+            group.userData = { name: type.charAt(0).toUpperCase() + type.slice(1), type: 'figure', id: 'fig_' + Date.now(), animTime: Math.random() * 100 };
+            group.position.set((Math.random() - 0.5) * 4, 0, (Math.random() - 0.5) * 4);
+            scene.add(group);
+            sceneObjects.push(group);
+            selectObject(group);
+            updateHierarchy();
+            updateStatus();
+            logConsole(`Spawned ${group.userData.name}`);
+        }
+
+        function spawnProp(type) {
+            const group = new THREE.Group();
+            const mat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.7 });
+
+            if (type === 'wizard tower') {
+                const base = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1, 3, 8), mat.clone());
+                base.position.y = 1.5;
+                base.castShadow = true;
+                group.add(base);
+                const roof = new THREE.Mesh(new THREE.ConeGeometry(1, 1.5, 8), new THREE.MeshStandardMaterial({ color: 0x4444aa }));
+                roof.position.y = 3.75;
+                roof.castShadow = true;
+                group.add(roof);
+            } else if (type === 'tavern') {
+                const base = new THREE.Mesh(new THREE.BoxGeometry(2, 1.5, 2), mat.clone());
+                base.position.y = 0.75;
+                base.castShadow = true;
+                group.add(base);
+                const roof = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.3, 2.4), new THREE.MeshStandardMaterial({ color: 0x884422 }));
+                roof.position.y = 1.65;
+                roof.castShadow = true;
+                group.add(roof);
+            } else {
+                const base = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat);
+                base.position.y = 0.5;
+                base.castShadow = true;
+                group.add(base);
+            }
+
+            group.userData = { name: type.charAt(0).toUpperCase() + type.slice(1), type: 'prop', id: 'prop_' + Date.now() };
+            group.position.set(0, 0, 0);
+            scene.add(group);
+            sceneObjects.push(group);
+            selectObject(group);
+            updateHierarchy();
+            updateStatus();
+            logConsole(`Spawned ${group.userData.name}`);
+        }
+
+        function placeBuildItem() {
+            if (!selectedBuildType) return;
+            const mesh = createBuildMesh(selectedBuildType);
+            if (!mesh) return;
+            const pos = getGridPosition();
+            mesh.position.set(pos.x, mesh.userData.baseY || 0.5, pos.z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData = { ...mesh.userData, name: selectedBuildType.charAt(0).toUpperCase() + selectedBuildType.slice(1), type: 'build', id: 'build_' + Date.now() };
+            scene.add(mesh);
+            sceneObjects.push(mesh);
+            selectObject(mesh);
+            updateHierarchy();
+            updateStatus();
+            logConsole(`Placed ${selectedBuildType}`);
+        }
+
+        function createBuildMesh(type) {
+            const mat = new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7 });
+            let mesh;
+            const userData = { baseY: 0.5 };
+
+            switch(type) {
+                case 'wall':
+                    mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 0.2), mat.clone());
+                    mat.color.set(0x888888);
+                    userData.baseY = 0.5;
+                    break;
+                case 'floor':
+                    mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 0.1, 1), mat.clone());
+                    mat.color.set(0x666666);
+                    userData.baseY = 0.05;
+                    break;
+                case 'pillar':
+                    mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 2, 8), mat.clone());
+                    mat.color.set(0x777777);
+                    userData.baseY = 1.0;
+                    break;
+                case 'ramp':
+                    mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 0.3, 1), mat.clone());
+                    mesh.rotation.x = 0.4;
+                    userData.baseY = 0.15;
+                    break;
+                case 'stairs':
+                    const group = new THREE.Group();
+                    for(let i = 0; i < 4; i++) {
+                        const step = new THREE.Mesh(new THREE.BoxGeometry(1, 0.25, 0.3), mat.clone());
+                        step.position.set(0, 0.125 + i * 0.25, -i * 0.3);
+                        step.castShadow = true;
+                        group.add(step);
+                    }
+                    mesh = group;
+                    userData.baseY = 0;
+                    break;
+                case 'tree':
+                    const treeGroup = new THREE.Group();
+                    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, 1.5, 8), new THREE.MeshStandardMaterial({ color: 0x8B4513 }));
+                    trunk.position.y = 0.75;
+                    trunk.castShadow = true;
+                    treeGroup.add(trunk);
+                    const leaves = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.5, 8), new THREE.MeshStandardMaterial({ color: 0x228B22 }));
+                    leaves.position.y = 2;
+                    leaves.castShadow = true;
+                    treeGroup.add(leaves);
+                    mesh = treeGroup;
+                    userData.baseY = 0;
+                    break;
+                case 'rock':
+                    mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(0.4, 0), new THREE.MeshStandardMaterial({ color: 0x666666 }));
+                    mesh.scale.set(1 + Math.random(), 0.6 + Math.random() * 0.4, 1 + Math.random());
+                    userData.baseY = 0.2;
+                    break;
+                default:
+                    mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat);
+                    userData.baseY = 0.5;
+            }
+            mesh.userData = userData;
+            return mesh;
+        }
+
+        // ==========================================
+        // SELECTION & HIERARCHY
+        // ==========================================
+        function selectObject(obj) {
+            selectedObject = obj;
+            updateHierarchy();
+            updateInspector();
+            updateTimeline();
+            updateBoneTree();
+            createGizmoArrows();
+        }
+
+        function updateHierarchy() {
+            const list = document.getElementById('hierarchy-list');
+            list.innerHTML = '';
+            sceneObjects.forEach(obj => {
+                const item = document.createElement('div');
+                item.className = 'tree-item' + (obj === selectedObject ? ' selected' : '');
+                const icon = obj.userData.type === 'figure' ? '♟' : obj.userData.type === 'build' ? '▬' : obj.userData.type === 'prop' ? '🏠' : '◻';
+                item.innerHTML = `<span class="name">${icon} ${obj.userData.name || 'Object'}</span>`;
+                item.onclick = (e) => { e.stopPropagation(); selectObject(obj); };
+                list.appendChild(item);
+            });
+        }
+
+        function updateInspector() {
+            const panel = document.getElementById('inspector-content');
+            if (!selectedObject) {
+                panel.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-dim);">Select an object to view properties</div>';
+                return;
+            }
+
+            const pos = selectedObject.position;
+            const rot = selectedObject.rotation;
+            const scl = selectedObject.scale;
+            const name = selectedObject.userData.name || 'Unnamed';
+            const type = selectedObject.userData.type || 'unknown';
+
+            panel.innerHTML = `
+                <div class="prop-section">
+                    <div class="prop-section-title">Object</div>
+                    <div class="prop-row">
+                        <span class="prop-label">Name</span>
+                        <input class="prop-input" value="${name}" onchange="selectedObject.userData.name=this.value; updateHierarchy();">
+                    </div>
+                    <div class="prop-row">
+                        <span class="prop-label">Type</span>
+                        <span style="font-size:12px; color: var(--green);">${type}</span>
+                    </div>
+                    <div class="prop-row">
+                        <span class="prop-label">ID</span>
+                        <span style="font-size:11px; color: var(--text-dim); font-family:monospace;">${selectedObject.userData.id || 'none'}</span>
+                    </div>
+                </div>
+                <div class="prop-section">
+                    <div class="prop-section-title">Transform</div>
+                    <div class="prop-row">
+                        <span class="prop-label">Position</span>
+                        <div class="prop-input-xyz">
+                            <div class="xyz-field"><span class="xyz-label x">X</span><input class="xyz-input" type="number" step="0.1" value="${pos.x.toFixed(2)}" onchange="selectedObject.position.x=parseFloat(this.value)"></div>
+                            <div class="xyz-field"><span class="xyz-label y">Y</span><input class="xyz-input" type="number" step="0.1" value="${pos.y.toFixed(2)}" onchange="selectedObject.position.y=parseFloat(this.value)"></div>
+                            <div class="xyz-field"><span class="xyz-label z">Z</span><input class="xyz-input" type="number" step="0.1" value="${pos.z.toFixed(2)}" onchange="selectedObject.position.z=parseFloat(this.value)"></div>
+                        </div>
+                    </div>
+                    <div class="prop-row">
+                        <span class="prop-label">Rotation</span>
+                        <div class="prop-input-xyz">
+                            <div class="xyz-field"><span class="xyz-label x">X</span><input class="xyz-input" type="number" step="0.1" value="${THREE.MathUtils.radToDeg(rot.x).toFixed(1)}" onchange="selectedObject.rotation.x=THREE.MathUtils.degToRad(parseFloat(this.value))"></div>
+                            <div class="xyz-field"><span class="xyz-label y">Y</span><input class="xyz-input" type="number" step="0.1" value="${THREE.MathUtils.radToDeg(rot.y).toFixed(1)}" onchange="selectedObject.rotation.y=THREE.MathUtils.degToRad(parseFloat(this.value))"></div>
+                            <div class="xyz-field"><span class="xyz-label z">Z</span><input class="xyz-input" type="number" step="0.1" value="${THREE.MathUtils.radToDeg(rot.z).toFixed(1)}" onchange="selectedObject.rotation.z=THREE.MathUtils.degToRad(parseFloat(this.value))"></div>
+                        </div>
+                    </div>
+                    <div class="prop-row">
+                        <span class="prop-label">Scale</span>
+                        <div class="prop-input-xyz">
+                            <div class="xyz-field"><span class="xyz-label x">X</span><input class="xyz-input" type="number" step="0.1" value="${scl.x.toFixed(2)}" onchange="selectedObject.scale.x=parseFloat(this.value)"></div>
+                            <div class="xyz-field"><span class="xyz-label y">Y</span><input class="xyz-input" type="number" step="0.1" value="${scl.y.toFixed(2)}" onchange="selectedObject.scale.y=parseFloat(this.value)"></div>
+                            <div class="xyz-field"><span class="xyz-label z">Z</span><input class="xyz-input" type="number" step="0.1" value="${scl.z.toFixed(2)}" onchange="selectedObject.scale.z=parseFloat(this.value)"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="prop-section">
+                    <div class="prop-section-title">Material</div>
+                    <div class="prop-row">
+                        <span class="prop-label">Color</span>
+                        <input type="color" class="prop-input" style="height:30px;padding:2px;" value="#${getMaterialColor(selectedObject)}" onchange="setObjectColor(this.value)">
+                    </div>
+                </div>
+            `;
+        }
+
+        function getMaterialColor(obj) {
+            if (obj.material) return obj.material.color.getHexString();
+            if (obj.children && obj.children[0] && obj.children[0].material) return obj.children[0].material.color.getHexString();
+            return '888888';
+        }
+
+        function setObjectColor(hex) {
+            if (!selectedObject) return;
+            const color = new THREE.Color(hex);
+            if (selectedObject.material) selectedObject.material.color = color;
+            if (selectedObject.children) selectedObject.children.forEach(c => { if (c.material) c.material.color = color; });
+        }
+
+        // ==========================================
+        // BONE / RIGGING SYSTEM
+        // ==========================================
+        function updateBoneTree() {
+            const tree = document.getElementById('bone-tree');
+            tree.innerHTML = '';
+            if (!selectedObject || selectedObject.userData.type !== 'figure') {
+                tree.innerHTML = '<div style="padding:12px; color: var(--text-dim); font-size:12px;">Select a figure to rig</div>';
+                return;
+            }
+
+            const bones = ['Hips', 'Spine', 'Chest', 'Neck', 'Head', 'L_Shoulder', 'L_UpperArm', 'L_LowerArm', 'L_Hand', 'R_Shoulder', 'R_UpperArm', 'R_LowerArm', 'R_Hand', 'L_UpperLeg', 'L_LowerLeg', 'L_Foot', 'R_UpperLeg', 'R_LowerLeg', 'R_Foot'];
+            const indent = { Hips: 0, Spine: 1, Chest: 2, Neck: 3, Head: 4, L_Shoulder: 3, L_UpperArm: 4, L_LowerArm: 5, L_Hand: 6, R_Shoulder: 3, R_UpperArm: 4, R_LowerArm: 5, R_Hand: 6, L_UpperLeg: 1, L_LowerLeg: 2, L_Foot: 3, R_UpperLeg: 1, R_LowerLeg: 2, R_Foot: 3 };
+
+            bones.forEach(bone => {
+                const item = document.createElement('div');
+                item.className = 'bone-item' + (selectedBone === bone ? ' selected' : '');
+                item.style.paddingLeft = (12 + (indent[bone] || 0) * 12) + 'px';
+                item.innerHTML = `<span class="bone-dot"></span><span>${bone}</span>`;
+                item.onclick = () => { selectedBone = bone; updateBoneTree(); updateBoneProps(); };
+                tree.appendChild(item);
+            });
+        }
+
+        function updateBoneProps() {
+            const panel = document.getElementById('bone-props');
+            if (!selectedBone) {
+                panel.innerHTML = '<div style="color: var(--text-dim); padding: 20px; text-align: center;">Select a bone to edit properties</div>';
+                return;
+            }
+            panel.innerHTML = `
+                <div class="prop-row"><span class="prop-label">Bone</span><span style="font-size:12px; color: var(--orange);">${selectedBone}</span></div>
+                <div class="prop-row">
+                    <span class="prop-label">Position</span>
+                    <div class="prop-input-xyz">
+                        <div class="xyz-field"><span class="xyz-label x">X</span><input class="xyz-input" type="number" step="0.01" value="0"></div>
+                        <div class="xyz-field"><span class="xyz-label y">Y</span><input class="xyz-input" type="number" step="0.01" value="0"></div>
+                        <div class="xyz-field"><span class="xyz-label z">Z</span><input class="xyz-input" type="number" step="0.01" value="0"></div>
+                    </div>
+                </div>
+                <div class="prop-row">
+                    <span class="prop-label">Rotation</span>
+                    <div class="prop-input-xyz">
+                        <div class="xyz-field"><span class="xyz-label x">X</span><input class="xyz-input" type="number" step="1" value="0"></div>
+                        <div class="xyz-field"><span class="xyz-label y">Y</span><input class="xyz-input" type="number" step="1" value="0"></div>
+                        <div class="xyz-field"><span class="xyz-label z">Z</span><input class="xyz-input" type="number" step="1" value="0"></div>
+                    </div>
+                </div>
+                <div class="prop-row">
+                    <span class="prop-label">Limits</span>
+                    <input type="checkbox" checked> Enabled
+                </div>
+            `;
+        }
+
+        function addBone() {
+            logConsole('Added new bone to hierarchy');
+        }
+
+        function playBoneAnim() {
+            if (selectedObject) {
+                selectedObject.userData.animating = true;
+                logConsole('Playing animation preview on selected figure');
+            }
+        }
+
+        function stopBoneAnim() {
+            if (selectedObject) {
+                selectedObject.userData.animating = false;
+            }
+        }
+
+        // ==========================================
+        // ANIMATION TIMELINE
+        // ==========================================
+        function updateTimeline() {
+            const tracks = document.getElementById('timeline-tracks');
+            if (!selectedObject) {
+                tracks.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-dim);">Select an object to view animation tracks</div>';
+                return;
+            }
+
+            const name = selectedObject.userData.name || 'Object';
+            tracks.innerHTML = `
+                <div style="font-size:11px; color: var(--text-dim); margin-bottom: 8px;">Animation tracks for: <span style="color: var(--text-bright);">${name}</span></div>
+                <div class="track">
+                    <span class="track-label">Position X</span>
+                    <div class="track-bar" style="position:relative;">
+                        <div class="track-key" style="left: 10%;"></div>
+                        <div class="track-key" style="left: 40%;"></div>
+                        <div class="track-key" style="left: 75%;"></div>
+                    </div>
+                </div>
+                <div class="track">
+                    <span class="track-label">Position Y</span>
+                    <div class="track-bar" style="position:relative;">
+                        <div class="track-key" style="left: 0%;"></div>
+                        <div class="track-key" style="left: 50%;"></div>
+                        <div class="track-key" style="left: 100%;"></div>
+                    </div>
+                </div>
+                <div class="track">
+                    <span class="track-label">Position Z</span>
+                    <div class="track-bar" style="position:relative;">
+                        <div class="track-key" style="left: 15%;"></div>
+                        <div class="track-key" style="left: 60%;"></div>
+                    </div>
+                </div>
+                <div class="track">
+                    <span class="track-label">Rotation Y</span>
+                    <div class="track-bar" style="position:relative;">
+                        <div class="track-key" style="left: 25%;"></div>
+                        <div class="track-key" style="left: 70%;"></div>
+                    </div>
+                </div>
+                <div style="margin-top: 8px;">
+                    <button class="modal-btn" onclick="logConsole('Created new animation clip')" style="font-size:11px;">+ New Animation Clip</button>
+                </div>
+            `;
+        }
+
+        function animTogglePlay() {
+            animPlaying = !animPlaying;
+            document.getElementById('play-btn').textContent = animPlaying ? '⏸' : '▶';
+            logConsole(animPlaying ? 'Animation playing' : 'Animation paused');
+        }
+
+        function animFirst() { animTime = 0; updateTimelineTime(); }
+        function animPrev() { animTime = Math.max(0, animTime - 1); updateTimelineTime(); }
+        function animNext() { animTime += 1; updateTimelineTime(); }
+        function animLast() { animTime = 30; updateTimelineTime(); }
+
+        function updateTimelineTime() {
+            const secs = Math.floor(animTime / 24);
+            const frames = animTime % 24;
+            document.getElementById('tl-time').textContent = `00:${secs.toString().padStart(2,'0')}:${frames.toString().padStart(2,'0')} / 00:01:06`;
+        }
+
+        function addKeyframe() {
+            logConsole(`Added keyframe at frame ${animTime}`);
+        }
+
+        // ==========================================
+        // PHYSICS
+        // ==========================================
+        function setGravity(val) { gravity = parseFloat(val); document.getElementById('grav-val').textContent = val; }
+        function setTimeScale(val) { timeScale = parseFloat(val); document.getElementById('ts-val').textContent = parseFloat(val).toFixed(1); }
+        function toggleColliders(show) { showPhysics = show; }
+        function toggleCenters(show) { /* placeholder */ }
+
+        // ==========================================
+        // INPUT HANDLING
+        // ==========================================
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let isDragging = false;
+        let dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        let dragOffset = new THREE.Vector3();
+
+        function getGridPosition() {
+            raycaster.setFromCamera(mouse, camera);
+            const target = new THREE.Vector3();
+            raycaster.ray.intersectPlane(dragPlane, target);
+            if (snapToGrid) {
+                target.x = Math.round(target.x);
+                target.z = Math.round(target.z);
+            }
+            return target;
+        }
+
+        function isOverUI(x, y) {
+            return false;
+        }
+
+        renderer.domElement.addEventListener('mousedown', e => {
+            mouse.x = (e.clientX / renderer.domElement.clientWidth) * 2 - 1;
+            mouse.y = -(e.clientY / renderer.domElement.clientHeight) * 2 + 1;
+
+            if (e.button === 0) {
+                if (currentTool === 'build' && selectedBuildType) {
+                    placeBuildItem();
+                    return;
+                }
+
+                // Object selection
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(sceneObjects, true);
+                if (intersects.length > 0) {
+                    let obj = intersects[0].object;
+                    while (obj.parent && !sceneObjects.includes(obj)) obj = obj.parent;
+                    if (sceneObjects.includes(obj)) {
+                        selectObject(obj);
+                        if (currentTool === 'move') {
+                            isDragging = true;
+                            const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                            raycaster.ray.intersectPlane(plane, dragOffset);
+                            dragOffset.sub(obj.position);
+                        }
+                    }
+                } else {
+                    selectObject(null);
+                }
+            } else if (e.button === 2) {
+                isOrbiting = true;
+                orbitStart = { x: e.clientX, y: e.clientY };
+            } else if (e.button === 1) {
+                isPanning = true;
+                orbitStart = { x: e.clientX, y: e.clientY };
+            }
+        });
+
+        renderer.domElement.addEventListener('mousemove', e => {
+            if (isOrbiting) {
+                const dx = e.clientX - orbitStart.x;
+                const dy = e.clientY - orbitStart.y;
+                cameraAngles.theta -= dx * 0.005;
+                cameraAngles.phi = Math.max(0.1, Math.min(Math.PI / 2 - 0.01, cameraAngles.phi - dy * 0.005));
+                orbitStart = { x: e.clientX, y: e.clientY };
+            }
+            if (isPanning) {
+                const dx = e.clientX - orbitStart.x;
+                const dy = e.clientY - orbitStart.y;
+                const right = new THREE.Vector3();
+                const up = new THREE.Vector3();
+                camera.getWorldDirection(new THREE.Vector3());
+                right.crossVectors(camera.up, new THREE.Vector3().subVectors(camera.position, cameraTarget)).normalize();
+                up.copy(camera.up);
+                cameraTarget.add(right.multiplyScalar(-dx * 0.02));
+                cameraTarget.add(up.multiplyScalar(dy * 0.02));
+                orbitStart = { x: e.clientX, y: e.clientY };
+            }
+            if (isDragging && selectedObject && currentTool === 'move') {
+                mouse.x = (e.clientX / renderer.domElement.clientWidth) * 2 - 1;
+                mouse.y = -(e.clientY / renderer.domElement.clientHeight) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                const target = new THREE.Vector3();
+                raycaster.ray.intersectPlane(dragPlane, target);
+                target.sub(dragOffset);
+                if (snapToGrid) {
+                    target.x = Math.round(target.x);
+                    target.z = Math.round(target.z);
+                }
+                selectedObject.position.x = target.x;
+                selectedObject.position.z = target.z;
+                createGizmoArrows();
+                updateInspector();
+            }
+        });
+
+        renderer.domElement.addEventListener('mouseup', e => {
+            if (e.button === 2) isOrbiting = false;
+            if (e.button === 1) isPanning = false;
+            if (e.button === 0) isDragging = false;
+        });
+
+        renderer.domElement.addEventListener('wheel', e => {
+            cameraDistance = Math.max(3, Math.min(50, cameraDistance + e.deltaY * 0.02));
+        });
+
+        renderer.domElement.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            const menu = document.getElementById('context-menu');
+            menu.style.left = e.clientX + 'px';
+            menu.style.top = e.clientY + 'px';
+            menu.classList.add('visible');
+        });
+
+        window.addEventListener('click', e => {
+            if (!e.target.closest('.context-menu')) {
+                document.getElementById('context-menu').classList.remove('visible');
+            }
+        });
+
+        window.addEventListener('keydown', e => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+            
+            if (e.key.toLowerCase() === 'q') setTool('select');
+            if (e.key.toLowerCase() === 'w') setTool('move');
+            if (e.key.toLowerCase() === 'e') setTool('rotate');
+            if (e.key.toLowerCase() === 'r') setTool('scale');
+            if (e.key === 'Delete') deleteSelected();
+            if (e.key === 'f') focusSelected();
+            if (e.ctrlKey && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateSelected(); }
+        });
+
+        // ==========================================
+        // TOOL FUNCTIONS
+        // ==========================================
+        function setTool(tool) {
+            currentTool = tool;
+            document.querySelectorAll('.vp-btn[data-tool]').forEach(btn => btn.classList.toggle('active', btn.dataset.tool === tool));
+        }
+
+        function toggleGrid() { gridHelper.visible = !gridHelper.visible; }
+        function togglePhysicsDebug() { showPhysics = !showPhysics; logConsole('Physics debug: ' + (showPhysics ? 'ON' : 'OFF')); }
+        function toggleSnap() { snapToGrid = !snapToGrid; logConsole('Snap: ' + (snapToGrid ? 'ON' : 'OFF')); }
+
+        function deleteSelected() {
+            if (!selectedObject) return;
+            scene.remove(selectedObject);
+            sceneObjects = sceneObjects.filter(o => o !== selectedObject);
+            logConsole(`Deleted ${selectedObject.userData.name}`);
+            selectObject(null);
+            updateHierarchy();
+            updateStatus();
+            document.getElementById('context-menu').classList.remove('visible');
+        }
+
+        function duplicateSelected() {
+            if (!selectedObject) return;
+            const clone = selectedObject.clone();
+            clone.position.x += 1;
+            clone.position.z += 1;
+            clone.userData = { ...selectedObject.userData, id: 'clone_' + Date.now(), name: selectedObject.userData.name + ' (Copy)' };
+            scene.add(clone);
+            sceneObjects.push(clone);
+            selectObject(clone);
+            updateHierarchy();
+            updateStatus();
+            logConsole(`Duplicated ${clone.userData.name}`);
+            document.getElementById('context-menu').classList.remove('visible');
+        }
+
+        function focusSelected() {
+            if (selectedObject) {
+                cameraTarget.copy(selectedObject.position);
+                cameraDistance = 8;
+            }
+            document.getElementById('context-menu').classList.remove('visible');
+        }
+
+        function renameSelected() {
+            if (!selectedObject) return;
+            const newName = prompt('Enter new name:', selectedObject.userData.name);
+            if (newName) {
+                selectedObject.userData.name = newName;
+                updateHierarchy();
+                updateInspector();
+            }
+            document.getElementById('context-menu').classList.remove('visible');
+        }
+
+        function addComponent() {
+            logConsole('Add Component dialog (placeholder)');
+            document.getElementById('context-menu').classList.remove('visible');
+        }
+
+        function addEmptyObject() {
+            const empty = new THREE.Group();
+            empty.userData = { name: 'Empty Object', type: 'empty', id: 'empty_' + Date.now() };
+            scene.add(empty);
+            sceneObjects.push(empty);
+            selectObject(empty);
+            updateHierarchy();
+            updateStatus();
+            logConsole('Added empty object');
+        }
+
+        function showImportModal() {
+            const body = document.getElementById('modal-body');
+            document.getElementById('modal-title').textContent = 'Import Assets';
+            body.innerHTML = `
+                <div style="text-align:center; padding: 30px; border: 2px dashed var(--border); border-radius: 8px;">
+                    <div style="font-size: 40px; margin-bottom: 10px;">📁</div>
+                    <p style="color: var(--text-dim);">Drag & drop files here or click to browse</p>
+                    <p style="font-size: 11px; color: var(--text-dim); margin-top: 8px;">Supports: .glb, .gltf, .png, .jpg, .mp3, .fbx</p>
+                </div>
+            `;
+            document.getElementById('modal-overlay').classList.add('visible');
+        }
+
+        // ==========================================
+        // UI SWITCHING
+        // ==========================================
+        function switchLeftTab(tab) {
+            document.querySelectorAll('#left-panel .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+            document.getElementById('hierarchy-panel').style.display = tab === 'hierarchy' ? 'flex' : 'none';
+            document.getElementById('assets-panel').style.display = tab === 'assets' ? 'flex' : 'none';
+            document.getElementById('build-panel').style.display = tab === 'build' ? 'flex' : 'none';
+        }
+
+        function switchBottomTab(tab) {
+            document.querySelectorAll('.bottom-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+            document.querySelectorAll('.bottom-page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.bottom-page').forEach(p => p.style.display = 'none');
+            const page = document.getElementById(tab + '-page');
+            page.classList.add('active');
+            page.style.display = tab === 'animation' || tab === 'rigging' ? 'flex' : 'block';
+        }
+
+        function showModal(type) { logConsole(`Menu: ${type} (placeholder)`); }
+        function closeModal() { document.getElementById('modal-overlay').classList.remove('visible'); }
+        function modalConfirm() { closeModal(); }
+
+        // ==========================================
+        // CONSOLE
+        // ==========================================
+        function logConsole(msg) {
+            const output = document.getElementById('console-output');
+            const time = new Date().toLocaleTimeString();
+            output.innerHTML += `<div style="border-bottom: 1px solid var(--border); padding: 2px 0;"><span style="color: var(--text-dim);">[${time}]</span> ${msg}</div>`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        // ==========================================
+        // STATUS BAR
+        // ==========================================
+        function updateStatus() {
+            document.getElementById('status-objects').textContent = `Objects: ${sceneObjects.length}`;
+            let triCount = 0;
+            scene.traverse(obj => {
+                if (obj.geometry) {
+                    if (obj.geometry.attributes.position) triCount += obj.geometry.attributes.position.count / 3;
+                }
+            });
+            document.getElementById('status-triangles').textContent = `Triangles: ${Math.round(triCount).toLocaleString()}`;
+        }
+
+        // ==========================================
+        // RESIZE
+        // ==========================================
+        function onResize() {
+            const vp = document.getElementById('viewport');
+            camera.aspect = vp.clientWidth / vp.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(vp.clientWidth, vp.clientHeight);
+        }
+        window.addEventListener('resize', onResize);
+
+        // ==========================================
+        // INIT
+        // ==========================================
+        function init() {
+            initBuildPalette();
+            initAssetGrid();
+            updateHierarchy();
+            updateStatus();
+            onResize();
+            logConsole('D&D Game Engine Dev Workspace initialized');
+            logConsole('Tools available: Select(Q), Move(W), Rotate(E), Scale(R)');
+            logConsole('Right-click drag to orbit | Middle-click drag to pan | Scroll to zoom');
+        }
+
+        // ==========================================
+        // ANIMATION LOOP
+        // ==========================================
+        const clock = new THREE.Clock();
+        let frameCount = 0;
+        let fpsTime = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.05) * timeScale;
+
+            // Camera orbit
+            camera.position.x = cameraTarget.x + Math.sin(cameraAngles.theta) * Math.sin(cameraAngles.phi) * cameraDistance;
+            camera.position.y = cameraTarget.y + Math.cos(cameraAngles.phi) * cameraDistance;
+            camera.position.z = cameraTarget.z + Math.cos(cameraAngles.theta) * Math.sin(cameraAngles.phi) * cameraDistance;
+            camera.lookAt(cameraTarget);
+
+            // Figure idle animations
+            sceneObjects.forEach(obj => {
+                if (obj.userData.type === 'figure') {
+                    obj.userData.animTime = (obj.userData.animTime || 0) + dt;
+                    if (obj.userData.animating) {
+                        // Play animation preview
+                        obj.children.forEach((child, i) => {
+                            child.rotation.y = Math.sin(obj.userData.animTime * 3 + i) * 0.3;
+                        });
+                        obj.position.y = Math.abs(Math.sin(obj.userData.animTime * 5)) * 0.1;
+                    } else {
+                        // Idle bob
+                        obj.position.y = Math.sin(obj.userData.animTime * 2) * 0.02 + 0.02;
+                    }
+                }
+            });
+
+            // Update gizmo
+            createGizmoArrows();
+
+            // Physics debug visualization (placeholder)
+            if (showPhysics) {
+                // Could add wireframe colliders here
+            }
+
+            // FPS counter
+            frameCount++;
+            fpsTime += dt;
+            if (fpsTime >= 1) {
+                document.getElementById('status-fps').textContent = `FPS: ${frameCount}`;
+                frameCount = 0;
+                fpsTime = 0;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        init();
+        animate();
+    </script>
+</body>
+</html>
