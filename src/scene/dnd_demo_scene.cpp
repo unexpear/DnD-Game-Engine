@@ -35,6 +35,7 @@
 #include "game/progression.h"
 #include "game/item.h"
 #include "game/inventory.h"
+#include "game/rules.h"
 #include "ui/ui_system.h"
 #include "ui/ui_widget.h"
 #include "ui/ui_renderer.h"
@@ -308,7 +309,18 @@ void DndDemoScene::OnLoad() {
     equipItem(m_rogue, "Leather Armor");
 
     {
-        const CharacterInfo* info = m_componentRegistry.GetComponent<CharacterInfo>(m_rogue);
+        CharacterInfo* info = m_componentRegistry.GetComponent<CharacterInfo>(m_rogue);
+        EquipmentSlots* eq = m_componentRegistry.GetComponent<EquipmentSlots>(m_rogue);
+        if (info && eq) {
+            const i32 dex = AbilityScores::GetModifier(info->abilities.dexterity);
+            const ArmorData* body = eq->armor ? &eq->armor->armor : nullptr;
+            const i32 total = ComputeArmorClass(dex, body, eq->shield != nullptr);
+            info->armorClass = total;
+            if (ArmorClass* ac = m_componentRegistry.GetComponent<ArmorClass>(m_rogue)) {
+                ac->base = total;
+                ac->ClearBonuses();
+            }
+        }
         if (info) DND_LOG_INFO("Finn: lvl %d %s %s -- HP %d, AC %d",
             info->level, RaceDatabase::GetRace(info->race).name,
             ClassDatabase::GetClass(info->classType).name, info->maxHP, info->armorClass);
@@ -698,10 +710,7 @@ void DndDemoScene::PlaceMazeEnemies() {
                            : (etype == EnemyType::BUGBEAR) ? "bugbear"
                            : "goblin";
 
-    // Enemies scale with floor: more enemies, tougher stats
-    const i32 enemyLevel = m_currentFloor + 1;
-    const i32 baseHP = 9 + m_currentFloor * 5;
-    const i32 baseAC = 12 + m_currentFloor;
+    // Each floor uses that creature's stat block (HP, AC, abilities), not a linear scale.
     const f32 fracs[] = { 0.30f, 0.55f, 0.80f };
     const i32 count = (std::min)(m_currentFloor + 2, 3); // 2, 3, 3 enemies
 
@@ -710,11 +719,7 @@ void DndDemoScene::PlaceMazeEnemies() {
         if (idx == 0 || idx + 1 >= route.size()) continue;
         const Cell c = route[idx];
         const char* name = names[(std::min)(i, 3)];
-        const Entity g = CreateEnemy(name, etype, enemyLevel, CellToWorld(c.x, c.y));
-        if (HitPoints* hp = m_componentRegistry.GetComponent<HitPoints>(g)) {
-            hp->maximum = baseHP; hp->current = baseHP;
-        }
-        if (ArmorClass* ac = m_componentRegistry.GetComponent<ArmorClass>(g)) ac->base = baseAC;
+        const Entity g = CreateEnemy(name, etype, 1, CellToWorld(c.x, c.y));
         m_enemies.push_back(g);
         m_enemyCells.push_back(c);
         m_enemyAlerted.push_back(0);
@@ -1132,8 +1137,9 @@ void DndDemoScene::CheckEnemyDetection() {
     if (!rt) return;
     const Cell fc = WorldToCell(rt->position);
     const CharacterInfo* fi = m_componentRegistry.GetComponent<CharacterInfo>(m_rogue);
-    const i32 stealthMod = (fi ? AbilityScores::GetModifier(fi->abilities.dexterity) : 3)
-                         + (fi ? fi->proficiencyBonus : 2);
+    const i32 stealthMod = fi
+        ? fi->skills.GetBonus(Skill::STEALTH, fi->abilities, fi->proficiencyBonus)
+        : CheckBonus(3, 2, ProficiencyRank::EXPERTISE);
 
     for (size_t i = 0; i < m_enemies.size(); ++i) {
         if (m_enemyContested[i] || m_enemyAlerted[i]) continue;   // contest is rolled once
@@ -1148,12 +1154,17 @@ void DndDemoScene::CheckEnemyDetection() {
         m_explored[ec.y][ec.x] = true;
 
         const CharacterInfo* gi = m_componentRegistry.GetComponent<CharacterInfo>(m_enemies[i]);
-        const i32 stealth = DiceRoller::Roll(1, 20) + stealthMod;
-        const i32 percept = DiceRoller::Roll(1, 20) + (gi ? AbilityScores::GetModifier(gi->abilities.wisdom) : -1);
+        const i32 perceptMod = gi
+            ? gi->skills.GetBonus(Skill::PERCEPTION, gi->abilities, gi->proficiencyBonus)
+            : -1;
+        // Tie keeps Finn unnoticed: the situation before the contest was "not spotted".
+        const ContestResult contest = RollContest(stealthMod, perceptMod);
+        const i32 stealth = contest.actor.total;
+        const i32 percept = contest.opposed.total;
         const Tag* tag = m_componentRegistry.GetComponent<Tag>(m_enemies[i]);
         const char* nm = (tag && tag->name) ? tag->name : "The goblin";
         char b[176];
-        if (percept >= stealth) {
+        if (OpposedCheckBeats(contest)) {
             m_enemyAlerted[i] = 1;
             std::snprintf(b, sizeof(b), "%s catches Finn's movement! (Stealth %d vs Perception %d) -- on guard.",
                           nm, stealth, percept);
@@ -1191,49 +1202,76 @@ void DndDemoScene::ResolveMazeAttack() {
     const i32 ti = EnemyIndex(foe);
     const EnemyType etype = (ti >= 0 && static_cast<size_t>(ti) < m_enemyTypes.size())
                             ? m_enemyTypes[ti] : EnemyType::GOBLIN;
-    const char* enemyLabel = (etype == EnemyType::SKELETON) ? "skeleton"
-                           : (etype == EnemyType::BUGBEAR) ? "bugbear"
-                           : "goblin";
+    const MonsterKind kind = (etype == EnemyType::SKELETON) ? MonsterKind::SKELETON
+                           : (etype == EnemyType::BUGBEAR) ? MonsterKind::BUGBEAR
+                           : MonsterKind::GOBLIN;
+    const MonsterProfile profile = GetMonsterProfile(kind);
+    const char* enemyLabel = profile.name;
 
-    // Finn's strike: d20 + DEX + proficiency vs the enemy's AC (shortsword 1d6 + DEX).
+    // Finn's strike uses the equipped weapon. Finesse (the shortsword) takes the
+    // higher of Strength and Dexterity. An unseen foe grants advantage; sneak
+    // attack dice are added only when the weapon is finesse or ranged.
     const CharacterInfo* info = m_componentRegistry.GetComponent<CharacterInfo>(m_rogue);
     const i32 dexMod = info ? AbilityScores::GetModifier(info->abilities.dexterity) : 3;
+    const i32 strMod = info ? AbilityScores::GetModifier(info->abilities.strength) : -1;
     const i32 prof   = info ? info->proficiencyBonus : 2;
-    const i32 atkMod = dexMod + prof;
     const i32 targetAC = ac->GetTotal();
-
-    // Striking an unaware enemy is a sneak attack: roll with advantage and add a
-    // sneak die. Either way, the strike gives Finn away (it's alerted afterwards).
-    const b8  sneak = (ti >= 0 && !m_enemyAlerted[ti]);
-    i32 roll = DiceRoller::Roll(1, 20);
-    if (sneak) { const i32 r2 = DiceRoller::Roll(1, 20); if (r2 > roll) roll = r2; } // advantage
+    const EquipmentSlots* eq = m_componentRegistry.GetComponent<EquipmentSlots>(m_rogue);
+    const ItemData* weapon = (eq && eq->weapon && eq->weapon->type == ItemType::WEAPON)
+        ? eq->weapon : nullptr;
+    i32 weaponDice = 1;
+    i32 weaponDie = 6;
+    DamageType damageType = DamageType::PIERCING;
+    b8 finesse = true;
+    b8 ranged = false;
+    if (weapon && weapon->weapon.damage.dice.numDice > 0 && weapon->weapon.damage.dice.numSides > 0) {
+        weaponDice = weapon->weapon.damage.dice.numDice;
+        weaponDie = weapon->weapon.damage.dice.numSides;
+        damageType = weapon->weapon.damage.type;
+        finesse = weapon->weapon.properties.isFinesse;
+        ranged = weapon->weapon.properties.isRanged;
+    }
+    const i32 abilityMod = WeaponAbilityModifier(strMod, dexMod, finesse, ranged);
+    const b8 unseen = (ti >= 0 && !m_enemyAlerted[ti]);
+    const b8 sneak = unseen && (finesse || ranged);
     if (ti >= 0) m_enemyAlerted[ti] = 1;
-    const b8  crit = (roll == 20);
-    const b8  hit  = crit || (roll != 1 && roll + atkMod >= targetAC);
+
+    StrikeSpec spec;
+    spec.attackBonus = abilityMod + prof;
+    spec.mode = unseen ? RollMode::ADVANTAGE : RollMode::NORMAL;
+    spec.targetArmorClass = targetAC;
+    spec.weaponDiceCount = weaponDice;
+    spec.weaponDieSize = weaponDie;
+    spec.extraDiceCount = sneak ? SneakAttackDice(info ? info->level : 1) : 0;
+    spec.extraDieSize = 6;
+    spec.flatModifier = abilityMod;
+    spec.affinity = MonsterDamageAffinity(profile, damageType);
+    const StrikeResult strike = RollStrike(spec);
+
+    const i32 roll = strike.check.natural;
+    const i32 atkMod = strike.check.modifier;
     char b[256];
-    if (!hit) {
+    if (!strike.hit) {
         std::snprintf(b, sizeof(b), "%sFinn swings: d20 %d %+d = %d vs AC %d -- miss.",
-                      sneak ? "From hiding -- " : "", roll, atkMod, roll + atkMod, targetAC);
+                      unseen ? "From hiding -- " : "", roll, atkMod, strike.check.total, targetAC);
         PushLog(b);
         return;  // a whiffed lunge: Finn pulls back, the exchange is a wash
     }
-    i32 dmg = DiceRoller::Roll(1, 6) + dexMod;     // shortsword 1d6 + DEX
-    if (crit)  dmg += DiceRoller::Roll(1, 6);      // crit: extra weapon die
-    if (sneak) dmg += DiceRoller::Roll(1, 6);      // sneak attack: +1d6
-
-    // Skeletons have piercing resistance: Finn's shortsword does half damage.
-    if (etype == EnemyType::SKELETON) {
-        dmg /= 2;
-        if (dmg < 1) dmg = 1;
-    }
-
-    if (dmg < 1) dmg = 1;
+    const i32 dmg = strike.damage;
     hp->TakeDamage(dmg);
+    const char* hitLabel = "Finn strikes";
+    if (sneak && strike.critical) hitLabel = "SNEAK ATTACK CRIT";
+    else if (sneak) hitLabel = "SNEAK ATTACK";
+    else if (strike.critical) hitLabel = "Finn CRITS";
     std::snprintf(b, sizeof(b), "%s: d20 %d %+d = %d vs AC %d -- HIT for %d! (%s %d/%d)",
-                  sneak ? "SNEAK ATTACK" : (crit ? "Finn CRITS" : "Finn strikes"),
-                  roll, atkMod, roll + atkMod, targetAC, dmg, fname, hp->current, hp->maximum);
-    if (etype == EnemyType::SKELETON)
-        PushLog("The skeleton's bones absorb the brunt of the piercing blade.");
+                  hitLabel, roll, atkMod, strike.check.total, targetAC, dmg, fname, hp->current, hp->maximum);
+    if (spec.affinity == DamageAffinity::VULNERABLE) {
+        PushLog("The blow finds a weak point -- vulnerability doubles the damage.");
+    } else if (spec.affinity == DamageAffinity::RESISTANT) {
+        PushLog("The creature resists, and the damage is halved.");
+    } else if (spec.affinity == DamageAffinity::IMMUNE) {
+        PushLog("The creature is immune. The blow does nothing.");
+    }
     PushLog(b);
 
     ScriptSystem::NotifyEvent(m_componentRegistry, foe,
@@ -1259,14 +1297,9 @@ void DndDemoScene::ResolveMazeAttack() {
         }
         PushLog(b);
 
-        // Award XP based on enemy type (not floor).
+        // Award the experience printed on the stat block.
         {
-            i32 xpReward = 50;
-            switch (etype) {
-                case EnemyType::SKELETON: xpReward = 100; break;
-                case EnemyType::BUGBEAR:  xpReward = 200; break;
-                default: break;
-            }
+            const i32 xpReward = profile.experience;
             Experience* exp = m_componentRegistry.GetComponent<Experience>(m_rogue);
             if (exp) {
                 i32 oldLevel = exp->level;
@@ -1297,30 +1330,27 @@ void DndDemoScene::ResolveMazeAttack() {
         return;                                    // dead -- no reprisal
     }
 
-    // Still standing: the enemy attacks back. Damage die depends on type.
-    const CharacterInfo* finfo = m_componentRegistry.GetComponent<CharacterInfo>(foe);
-    const i32 gStr  = finfo ? AbilityScores::GetModifier(finfo->abilities.strength) : 1;
-    const i32 gProf = finfo ? finfo->proficiencyBonus : 2;
+    // Still standing: the enemy attacks back with the weapon on its stat block.
+    // Death saving throws are not in this layer, so Finn is left at 1 HP.
     HitPoints*        fhp = m_componentRegistry.GetComponent<HitPoints>(m_rogue);
     const ArmorClass* fac = m_componentRegistry.GetComponent<ArmorClass>(m_rogue);
     const i32 finnAC = fac ? fac->GetTotal() : 13;
-    const i32 eroll = DiceRoller::Roll(1, 20);
-    i32 reprisalDie = 4; // default: dagger 1d4
-    const char* reprisalWeapon = "dagger";
-    switch (etype) {
-        case EnemyType::SKELETON:
-            reprisalDie = 6; reprisalWeapon = "shortsword"; break;
-        case EnemyType::BUGBEAR:
-            reprisalDie = 8; reprisalWeapon = "heavy club"; break;
-        default: break; // goblin uses default dagger
-    }
-    if (fhp && (eroll == 20 || (eroll != 1 && eroll + gStr + gProf >= finnAC))) {
-        i32 edmg = DiceRoller::Roll(1, reprisalDie) + gStr;
-        if (edmg < 1) edmg = 1;
-        fhp->TakeDamage(edmg);
-        if (fhp->current <= 0) fhp->current = 1;    // no death system in this layer -- Finn stays up
-        std::snprintf(b, sizeof(b), "%s lashes back with %s for %d! (Finn %d/%d)",
-                      fname, reprisalWeapon, edmg, fhp->current, fhp->maximum);
+    StrikeSpec reprisal;
+    reprisal.attackBonus = MonsterAttackBonus(profile);
+    reprisal.mode = RollMode::NORMAL;
+    reprisal.targetArmorClass = finnAC;
+    reprisal.weaponDiceCount = profile.melee.numDice;
+    reprisal.weaponDieSize = profile.melee.dieSize;
+    reprisal.flatModifier = MonsterDamageModifier(profile);
+    reprisal.affinity = DamageAffinity::NORMAL;
+    const StrikeResult enemyStrike = RollStrike(reprisal);
+    const char* reprisalWeapon = profile.melee.name;
+    if (fhp && enemyStrike.hit) {
+        fhp->TakeDamage(enemyStrike.damage);
+        if (fhp->current <= 0) fhp->current = 1;
+        std::snprintf(b, sizeof(b), "%s lashes back with %s%s for %d! (Finn %d/%d)",
+                      fname, reprisalWeapon, enemyStrike.critical ? " -- CRIT" : "",
+                      enemyStrike.damage, fhp->current, fhp->maximum);
         PushLog(b);
     } else {
         std::snprintf(b, sizeof(b), "%s lashes back with %s -- Finn turns it aside.",
@@ -1386,13 +1416,14 @@ void DndDemoScene::DoPerceptionSearch() {
     if (!rt) return;
     const Cell here = WorldToCell(rt->position);
 
-    // Rogues are sharp-eyed: WIS modifier + proficiency in Perception.
+    // Perception: Wisdom modifier, plus proficiency when Finn has it.
     const CharacterInfo* info = m_componentRegistry.GetComponent<CharacterInfo>(m_rogue);
-    const i32 wisMod = info ? AbilityScores::GetModifier(info->abilities.wisdom) : 0;
-    const i32 prof   = info ? info->proficiencyBonus : 2;
-    const i32 mod    = wisMod + prof;
-    const i32 roll   = DiceRoller::Roll(1, 20);
-    const i32 total  = roll + mod;
+    const i32 mod = info
+        ? info->skills.GetBonus(Skill::PERCEPTION, info->abilities, info->proficiencyBonus)
+        : CheckBonus(0, 2, ProficiencyRank::PROFICIENT);
+    const D20Check search = RollD20Check(RollMode::NORMAL, mod);
+    const i32 roll  = search.natural;
+    const i32 total = search.total;
     char b[160];
     std::snprintf(b, sizeof(b), "Finn searches: d20 %d %+d = %d (WIS / Perception).",
                   roll, mod, total);
@@ -2068,12 +2099,13 @@ void DndDemoScene::TryStartLockPick(i32 dc, const std::string& flavor) {
     const Transform* rt = m_componentRegistry.GetComponent<Transform>(m_rogue);
     if (!rt) return;
 
-    // The check comes from the rogue's real stats: a Dexterity check with thieves'
-    // tools + proficiency. The DC is whatever the DM/AI set (default 15).
+    // Dexterity (thieves' tools). Expertise adds the proficiency bonus twice.
     const CharacterInfo* info = m_componentRegistry.GetComponent<CharacterInfo>(m_rogue);
     m_lockDexMod = info ? AbilityScores::GetModifier(info->abilities.dexterity) : 0;
-    m_lockProf   = info ? info->proficiencyBonus : 2;
-    m_lockMod    = m_lockDexMod + m_lockProf;
+    const i32 baseProf = info ? info->proficiencyBonus : 2;
+    const ProficiencyRank toolRank = info ? info->tools.thievesTools : ProficiencyRank::PROFICIENT;
+    m_lockMod = CheckBonus(m_lockDexMod, baseProf, toolRank);
+    m_lockProf = m_lockMod - m_lockDexMod;
     m_lockDC     = dc;
     if (!flavor.empty()) PushLog(flavor);
 
@@ -2349,17 +2381,18 @@ void DndDemoScene::GenericCheck(const AiAction& act) {
     const CharacterInfo* info = m_componentRegistry.GetComponent<CharacterInfo>(m_rogue);
     i32 mod = 0;
     if (info) {
-        const std::string& a = act.ability;
-        if      (a == "STR") mod = AbilityScores::GetModifier(info->abilities.strength);
-        else if (a == "DEX") mod = AbilityScores::GetModifier(info->abilities.dexterity);
-        else if (a == "CON") mod = AbilityScores::GetModifier(info->abilities.constitution);
-        else if (a == "INT") mod = AbilityScores::GetModifier(info->abilities.intelligence);
-        else if (a == "WIS") mod = AbilityScores::GetModifier(info->abilities.wisdom);
-        else if (a == "CHA") mod = AbilityScores::GetModifier(info->abilities.charisma);
+        Skill skill;
+        Ability ability;
+        if (TryParseSkill(act.skill.c_str(), skill)) {
+            mod = info->skills.GetBonus(skill, info->abilities, info->proficiencyBonus);
+        } else if (TryParseAbility(act.ability.c_str(), ability)) {
+            mod = GetAbilityModifier(info->abilities, ability);
+        }
     }
-    const i32 roll  = DiceRoller::Roll(1, 20);
-    const i32 total = roll + mod;
-    const b8  ok    = total >= act.dc;
+    const D20Check check = RollD20Check(RollMode::NORMAL, mod);
+    const i32 roll  = check.natural;
+    const i32 total = check.total;
+    const b8  ok    = CheckSucceeds(check, act.dc);
     char b[128];
     std::snprintf(b, sizeof(b), "Finn rolls d20: %d %+d = %d vs DC %d -- %s",
                   roll, mod, total, act.dc, ok ? "SUCCESS!" : "failure.");
@@ -2605,8 +2638,19 @@ Entity DndDemoScene::CreateCharacter(const char* name, RaceType race, ClassType 
     // Visual representation
     m_componentRegistry.AddComponent<MeshRenderer>(entity, MeshRenderer(m_cubeMesh, Color(0.2f, 0.6f, 0.2f, 1)));
 
-    // D&D character info — auto-calculates HP, AC, proficiency
+    // D&D character info — auto-calculates HP, AC, proficiency.
+    // Saving throws come from the class. Finn's rogue build (the only character
+    // this demo creates) takes Stealth expertise, Perception, Sleight of Hand,
+    // Acrobatics, and thieves' tools expertise.
     CharacterInfo info(name, race, classType, abilities);
+    ApplyClassSavingThrows(classType, info.saves);
+    if (classType == ClassType::ROGUE) {
+        info.skills.AddExpertise(Skill::STEALTH);
+        info.skills.AddProficiency(Skill::PERCEPTION);
+        info.skills.AddProficiency(Skill::SLEIGHT_OF_HAND);
+        info.skills.AddProficiency(Skill::ACROBATICS);
+        info.tools.thievesTools = ProficiencyRank::EXPERTISE;
+    }
     m_componentRegistry.AddComponent<CharacterInfo>(entity, info);
 
     // HitPoints
@@ -2696,17 +2740,21 @@ Entity DndDemoScene::CreateEnemy(const char* name, EnemyType type, i32 level, co
     m_componentRegistry.AddComponent<Transform>(entity, Transform(
         position, Quat::Identity(), Vec3(1, 1, 1)));
 
+    DND_UNUSED(level); // Stat blocks are fixed CR, not a scaled fighter level.
+
+    const MonsterKind kind = (type == EnemyType::SKELETON) ? MonsterKind::SKELETON
+                           : (type == EnemyType::BUGBEAR) ? MonsterKind::BUGBEAR
+                           : MonsterKind::GOBLIN;
+    const MonsterProfile profile = GetMonsterProfile(kind);
+
     // Appearance and weapon depend on enemy type
     Color skinColor(0.8f, 0.2f, 0.1f, 1);
-    const char* weaponName = "Dagger";
     switch (type) {
         case EnemyType::SKELETON:
             skinColor = Color(0.88f, 0.82f, 0.72f, 1); // bone white
-            weaponName = "Shortsword";
             break;
         case EnemyType::BUGBEAR:
             skinColor = Color(0.38f, 0.22f, 0.08f, 1); // dark fur
-            weaponName = "Club";
             break;
         default: // GOBLIN
             skinColor = Color(0.50f, 0.68f, 0.18f, 1); // green
@@ -2714,23 +2762,14 @@ Entity DndDemoScene::CreateEnemy(const char* name, EnemyType type, i32 level, co
     }
     m_componentRegistry.AddComponent<MeshRenderer>(entity, MeshRenderer(m_cubeMesh, skinColor));
 
-    // Simple enemy stats
-    AbilityScores enemyAbilities;
-    switch (level) {
-        case 1: enemyAbilities = AbilityScores(13, 11, 12, 8, 9, 8); break;
-        case 2: enemyAbilities = AbilityScores(14, 12, 13, 10, 10, 9); break;
-        default: enemyAbilities = AbilityScores(15, 13, 14, 10, 11, 10); break;
-    }
-
-    // Build the descriptor at the enemy's actual level and NPC flags up front, so the
-    // constructor computes proficiencyBonus for the right level (setting these after
-    // construction left the derived stats computed for the default level 1).
-    CharacterInfo info(name, RaceType::HUMAN, ClassType::FIGHTER, enemyAbilities,
-                       SkillProficiencies(), level, /*isNPC*/ true, /*isHostile*/ true);
-    // Enemies use a custom stat block rather than the PC auto-calc, so override the
-    // derived HP/AC — and keep info.armorClass in sync with the ArmorClass component.
-    info.maxHP = 8 + level * 8;   // Scale HP for enemies: roughly 8 + (level * 8)
-    info.armorClass = 12 + level; // Simple scaling AC
+    // The class is only a placeholder so CharacterInfo can exist. HP, AC, abilities,
+    // and skills come from the stat block, not from the fighter progression.
+    CharacterInfo info(name, RaceType::HUMAN, ClassType::FIGHTER, profile.abilities,
+                       SkillProficiencies(), /*level*/ 1, /*isNPC*/ true, /*isHostile*/ true);
+    info.maxHP = profile.hitPoints;
+    info.armorClass = profile.armorClass;
+    info.proficiencyBonus = profile.proficiencyBonus;
+    ApplyMonsterSkills(profile, info.skills);
     m_componentRegistry.AddComponent<CharacterInfo>(entity, info);
 
     HitPoints hp;
@@ -2743,7 +2782,7 @@ Entity DndDemoScene::CreateEnemy(const char* name, EnemyType type, i32 level, co
     m_componentRegistry.AddComponent<ArmorClass>(entity, ac);
 
     Initiative init;
-    init.value = AbilityScores::GetModifier(enemyAbilities.dexterity);
+    init.value = AbilityScores::GetModifier(profile.abilities.dexterity);
     m_componentRegistry.AddComponent<Initiative>(entity, init);
 
     Speed speed;
@@ -2754,7 +2793,7 @@ Entity DndDemoScene::CreateEnemy(const char* name, EnemyType type, i32 level, co
     // component exactly once.
     Inventory inventory;
     inventory.maxItems = 5;
-    const ItemData* weapon = ItemDatabase::GetItem(weaponName);
+    const ItemData* weapon = profile.weaponItem ? ItemDatabase::GetItem(profile.weaponItem) : nullptr;
     if (weapon) { inventory.AddItem(weapon); }
     m_componentRegistry.AddComponent<Inventory>(entity, inventory);
 

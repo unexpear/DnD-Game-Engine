@@ -46,6 +46,11 @@ void DiceRoller::Initialize() {
     s_initialized = true;
 }
 
+void DiceRoller::Seed(u32 seed) {
+    s_generator.seed(seed);
+    s_initialized = true;
+}
+
 // ==========================================
 // DiceRoller::RollDie
 // ==========================================

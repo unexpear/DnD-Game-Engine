@@ -29,6 +29,7 @@
 #include "ecs/system.h"
 #include "ecs/component.h"
 #include "game/combat.h"
+#include "game/character_stats.h"
 #include <vector>
 #include <cstring>
 
@@ -187,6 +188,8 @@ struct SpellData {
     DamageRoll damage;               ///< Damage data if the spell deals damage.
     b8 requiresAttackRoll;           ///< If true, the spell requires a spell attack roll.
     b8 requiresSavingThrow;          ///< If true, the target gets a saving throw.
+    Ability saveAbility;             ///< Ability used when requiresSavingThrow is set.
+    b8 halfOnSave;                   ///< Successful save deals half damage (round down) instead of none.
 
     /**
      * @brief Default constructor. Creates an empty level-0 cantrip.
@@ -195,7 +198,8 @@ struct SpellData {
         : name(""), level(0), school(SpellSchool::ABJURATION)
         , castingTime(SpellCastingTime::ACTION), duration(), range()
         , requiresVerbal(false), requiresSomatic(false), requiresMaterial(false)
-        , description(""), requiresAttackRoll(false), requiresSavingThrow(false) {}
+        , description(""), requiresAttackRoll(false), requiresSavingThrow(false)
+        , saveAbility(Ability::DEXTERITY), halfOnSave(false) {}
 
     /**
      * @brief Parameterized constructor for a full spell definition.
@@ -224,7 +228,8 @@ struct SpellData {
         , requiresVerbal(requiresVerbal), requiresSomatic(requiresSomatic)
         , requiresMaterial(requiresMaterial), description(description)
         , damage(damage)
-        , requiresAttackRoll(requiresAttackRoll), requiresSavingThrow(requiresSavingThrow) {}
+        , requiresAttackRoll(requiresAttackRoll), requiresSavingThrow(requiresSavingThrow)
+        , saveAbility(Ability::DEXTERITY), halfOnSave(false) {}
 };
 
 // ==========================================

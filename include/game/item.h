@@ -99,7 +99,8 @@ enum class WeaponType : u32 {
     SHORTSWORD   = 10, ///< Martial light blade. 1d6 piercing, finesse, light.
     SPEAR        = 11, ///< Simple versatile polearm. 1d6 piercing, thrown, versatile.
     STAFF        = 12, ///< Arcane focus quarterstaff. 1d6 bludgeoning, versatile.
-    WARHAMMER    = 13  ///< Martial heavy hammer. 1d8 bludgeoning, versatile.
+    WARHAMMER    = 13, ///< Martial heavy hammer. 1d8 bludgeoning, versatile.
+    SCIMITAR     = 14  ///< Martial curved blade. 1d6 slashing, finesse, light.
 };
 
 // ==========================================

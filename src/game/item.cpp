@@ -38,6 +38,23 @@ static const ItemData s_itemTable[] = {
     },
 
     // ==========================================
+    // Scimitar
+    // ==========================================
+    {
+        "Scimitar",
+        "A curved one-handed blade. Finesse and light. 1d6 slashing.",
+        RarityType::COMMON,
+        3.0f,
+        25,
+        false, false,
+        WeaponData(
+            WeaponType::SCIMITAR,
+            DamageRoll(DiceRoll(1, 6), DamageType::SLASHING),
+            WeaponProperties(true, false, true, false, false, false, false, false, false)
+        )
+    },
+
+    // ==========================================
     // Shortsword
     // ==========================================
     {
