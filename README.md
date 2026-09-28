@@ -13,6 +13,12 @@ This project aims to create a fully custom D&D game engine that supports:
 - Automation systems for combat and gameplay
 - Custom workshop tools for user-generated content
 
+## DM Toolkit
+
+Press **F5** in the demo for editor mode, or **F7** to open the **Encounter** panel directly. From there a dungeon master can spawn the demo's goblin, skeleton, and bugbear miniatures, adjust HP, roll initiative (including Finn), and start or end that encounter.
+
+See [docs/DM_TOOLKIT.md](docs/DM_TOOLKIT.md) for the controls and for what the rest of the vision's DM toolkit still does not cover.
+
 ## Architecture
 
 ### Core Systems

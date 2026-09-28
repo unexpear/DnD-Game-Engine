@@ -42,6 +42,7 @@
 #include "tools/panel_hierarchy.h"
 #include "tools/inspector_panel.h"
 #include "tools/asset_browser_panel.h"
+#include "tools/encounter_panel.h"
 #include "tools/gizmo.h"
 #include "tools/undo.h"
 #include "tools/profiler.h"
@@ -97,6 +98,9 @@ static InspectorPanel* s_inspectorPanel = nullptr;
 /** @brief Editor asset browser panel. */
 static AssetBrowserPanel* s_assetBrowserPanel = nullptr;
 
+/** @brief DM encounter builder (spawn monsters, HP, initiative). */
+static EncounterPanel* s_encounterPanel = nullptr;
+
 // ==========================================
 // ENGINECONFIG DEFAULTS
 // ==========================================
@@ -119,8 +123,10 @@ b8 Engine::Initialize(const EngineConfig& config) {
     s_state = EngineState::INITIALIZING;
     s_config = config;
 
-    // Track what was initialized so we can clean up on failure
+    // Track what was initialized so we can clean up on failure.
+    // demoScene is declared up here so the failure gotos do not jump over its initializer.
     b8 logOk = false, windowOk = false, rendererOk = false, debugDrawOk = false, uiOk = false;
+    DndDemoScene* demoScene = nullptr;
 
     // Step 1: Initialize Logger
     DND_LOG_INFO("Initializing Logger...");
@@ -188,7 +194,7 @@ b8 Engine::Initialize(const EngineConfig& config) {
     s_sceneManager = new SceneManager();
 
     // Create and load the D&D demo scene
-    DndDemoScene* demoScene = new DndDemoScene();
+    demoScene = new DndDemoScene();
     s_sceneManager->SetActiveScene(std::unique_ptr<DndDemoScene>(demoScene));
 
     // ==========================================
@@ -210,6 +216,22 @@ b8 Engine::Initialize(const EngineConfig& config) {
         // Asset Browser panel (file browser)
         s_assetBrowserPanel = new AssetBrowserPanel();
         dm.RegisterPanel(s_assetBrowserPanel->GetDockPanel());
+
+        // DM encounter builder. Floats in the viewport gap so the roster stays
+        // readable; the title bar can still snap it into a dock zone.
+        s_encounterPanel = new EncounterPanel();
+        {
+            DockPanel* encounterDock = s_encounterPanel->GetDockPanel();
+            const f32 top = DockManager::TOP_HEIGHT + 8.0f;
+            const f32 bottomLimit = static_cast<f32>(s_config.windowHeight) - DockManager::BOTTOM_HEIGHT - 8.0f;
+            const f32 height = (bottomLimit - top) > 220.0f ? (bottomLimit - top) : 220.0f;
+            const Vec2 encounterPos(DockManager::SIDE_WIDTH + 12.0f, top);
+            encounterDock->SetDocked(false);
+            encounterDock->SetPosition(encounterPos);
+            encounterDock->SetSize(Vec2(360.0f, height));
+            encounterDock->SetFloatingPos(encounterPos);
+        }
+        dm.RegisterPanel(s_encounterPanel->GetDockPanel());
 
         // Build zones and dock panels into default positions
         dm.RecalculateZones(s_config.windowWidth, s_config.windowHeight);
@@ -488,6 +510,9 @@ void Engine::Run() {
                     s_inspectorPanel->Update(scene->GetEntityManager(),
                                              scene->GetComponentRegistry());
                 }
+                if (s_encounterPanel) {
+                    s_encounterPanel->Update(scene);
+                }
             }
         }
 
@@ -658,6 +683,19 @@ void Engine::HandleInput() {
         EditorSettings::Get().editorActive = !EditorSettings::Get().editorActive;
         DockManager::Get().SetActive(EditorSettings::Get().editorActive);
         DND_LOG_INFO("Editor %s", EditorSettings::Get().editorActive ? "activated" : "deactivated");
+    }
+
+    // F7 key: open the editor on the encounter panel, or toggle that panel while editing.
+    if (Input::IsKeyPressed(KeyCode::F7) && s_encounterPanel) {
+        if (!EditorSettings::Get().editorActive) {
+            EditorSettings::Get().editorActive = true;
+            DockManager::Get().SetActive(true);
+            s_encounterPanel->SetOpen(true);
+            DND_LOG_INFO("Editor activated (encounter panel)");
+        } else {
+            s_encounterPanel->SetOpen(!s_encounterPanel->IsOpen());
+            DND_LOG_INFO("Encounter panel %s", s_encounterPanel->IsOpen() ? "shown" : "hidden");
+        }
     }
 
     // ---- Orbit camera ----
@@ -943,6 +981,8 @@ void Engine::Shutdown() {
     s_inspectorPanel = nullptr;
     delete s_assetBrowserPanel;
     s_assetBrowserPanel = nullptr;
+    delete s_encounterPanel;
+    s_encounterPanel = nullptr;
     GizmoManager::Get().Shutdown();
     DockManager::Get().ClearPanels();
     DockManager::Get().SetActive(false);
