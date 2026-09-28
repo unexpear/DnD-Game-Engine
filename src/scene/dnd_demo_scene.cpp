@@ -430,6 +430,19 @@ void DndDemoScene::ClearFloorEntities() {
 }
 
 void DndDemoScene::DescendFloor() {
+    if (IsFinalFloor()) {
+        OnVictory();
+        return;
+    }
+    if (m_inEncounter) EndEncounter(false);
+    CancelMotion();
+    m_walking = false;
+    m_exploring = false;
+    m_pickPending = false;
+    m_path.clear();
+    m_pathIndex = 0;
+    m_lockPhase = LockPhase::IDLE;
+
     ClearFloorEntities();
     m_currentFloor++;
     m_descentPending = false;
@@ -625,7 +638,7 @@ void DndDemoScene::UpdateFogVisibility() {
         if (mr) mr->visible = m_explored[m_wallCells[i].y][m_wallCells[i].x];
     }
     if (MeshRenderer* cmr = m_componentRegistry.GetComponent<MeshRenderer>(m_chest))
-        cmr->visible = (m_currentFloor == 0) && m_chestFound;
+        cmr->visible = m_chestFound && (m_currentFloor == 0 || IsFinalFloor());
     // Trap markers: visible when the cell is explored (or within kTrapRevealR from Finn)
     for (size_t i = 0; i < m_trapMarkers.size(); ++i) {
         MeshRenderer* tmr = m_componentRegistry.GetComponent<MeshRenderer>(m_trapMarkers[i]);
@@ -938,24 +951,34 @@ void DndDemoScene::TriggerTrap(i32 idx) {
 
     switch (trap.type) {
         case TrapType::SPIKE: {
+            if (!trap.triggerMsg.empty()) PushLog(trap.triggerMsg);
             HitPoints* hp = m_componentRegistry.GetComponent<HitPoints>(m_rogue);
             if (hp) {
                 i32 dmg = static_cast<i32>(trap.damage);
                 if (dmg < 1) dmg = 1;
-                hp->current -= dmg;
-                if (hp->current < 0) hp->current = 0;
+                hp->TakeDamage(dmg);
+                char hb[64];
+                std::snprintf(hb, sizeof(hb), "Finn is at %d/%d HP.", hp->current, hp->maximum);
+                PushLog(hb);
+                if (!hp->IsAlive()) OnDefeat("The trap finishes Finn.");
             }
-            if (!trap.triggerMsg.empty()) PushLog(trap.triggerMsg);
             trap.cooldownTimer = trap.cooldownMax;
             break;
         }
         case TrapType::TELEPORTER: {
             Transform* rt = m_componentRegistry.GetComponent<Transform>(m_rogue);
             if (rt && trap.destCell.x >= 0 && trap.destCell.y >= 0) {
+                CancelMotion();
+                if (m_inEncounter) {
+                    EndEncounter(false);
+                    PushLog("The teleport rips Finn out of the melee.");
+                }
                 Vec3 dest = CellToWorld(trap.destCell.x, trap.destCell.y);
                 rt->position = dest;
                 // Stop any current walking and reset pathfinding
                 m_walking = false;
+                m_exploring = false;
+                m_pickPending = false;
                 m_path.clear();
                 // Re-grid position in fog
                 Cell fc = { trap.destCell.x, trap.destCell.y };
@@ -974,6 +997,8 @@ void DndDemoScene::TriggerTrap(i32 idx) {
                 trap.cooldownTimer = trap.cooldownMax;
             }
             if (!trap.triggerMsg.empty()) PushLog(trap.triggerMsg);
+            if (m_outcome == DemoOutcome::ONGOING)
+                PushLog("Type \"explore\" to find the path again.");
             break;
         }
         case TrapType::PRESSURE_PLATE: {
@@ -1015,24 +1040,39 @@ void DndDemoScene::TriggerTrap(i32 idx) {
             break;
         }
         case TrapType::CRUMBLING_FLOOR: {
+            if (!trap.triggerMsg.empty()) PushLog(trap.triggerMsg);
             HitPoints* hp = m_componentRegistry.GetComponent<HitPoints>(m_rogue);
             if (hp) {
                 i32 dmg = static_cast<i32>(trap.damage);
                 if (dmg < 1) dmg = 1;
-                hp->current -= dmg;
-                if (hp->current < 0) hp->current = 0;
+                hp->TakeDamage(dmg);
+                char hb[64];
+                std::snprintf(hb, sizeof(hb), "Finn is at %d/%d HP.", hp->current, hp->maximum);
+                PushLog(hb);
+                if (!hp->IsAlive()) {
+                    OnDefeat("The floor finishes Finn.");
+                    trap.active = false;
+                    break;
+                }
             }
-            // Teleport Finn back to start
+            // Still up: the pit dumps him back at the stair he came in by.
+            CancelMotion();
+            if (m_inEncounter) {
+                EndEncounter(false);
+                PushLog("The collapse throws Finn clear of the fight.");
+            }
             Transform* rt = m_componentRegistry.GetComponent<Transform>(m_rogue);
             if (rt) {
                 rt->position = CellToWorld(kStartX, kStartY);
                 m_walking = false;
+                m_exploring = false;
+                m_pickPending = false;
                 m_path.clear();
                 Cell fc = { kStartX, kStartY };
                 RevealAround(fc);
                 UpdateFogVisibility();
             }
-            if (!trap.triggerMsg.empty()) PushLog(trap.triggerMsg);
+            PushLog("Finn hauls himself back to the landing. Type \"explore\" to continue.");
             trap.active = false; // one-shot
             break;
         }
@@ -1048,6 +1088,7 @@ void DndDemoScene::CheckTraps(f32 dt) {
     for (i32 i = 0; i < static_cast<i32>(m_traps.size()); ++i) {
         TrapData& trap = m_traps[i];
         if (!trap.active) continue;
+        if (m_outcome != DemoOutcome::ONGOING) return;
 
         // Cooldown recovery
         if (trap.cooldownTimer > 0.0f) {
@@ -1058,9 +1099,16 @@ void DndDemoScene::CheckTraps(f32 dt) {
             }
         }
 
-        // Crumbling floor: track how long Finn stands on it
+        // Crumbling floor: halt so the stand timer can actually elapse.
+        // Auto-explore crosses a cell in about half a second, which used to
+        // reset the timer before the floor ever gave way.
         if (trap.type == TrapType::CRUMBLING_FLOOR &&
             trap.cell.x == fc.x && trap.cell.y == fc.y) {
+            if (trap.standTimer <= 0.0f) {
+                m_walking = false;
+                trap.standTimer = 0.0001f; // so a zero-dt frame cannot repeat the warning
+                PushLog("The floor groans under Finn. Leave it (\"explore\") before it gives way!");
+            }
             trap.standTimer += dt;
             if (trap.standTimer >= trap.standThreshold && !trap.triggered) {
                 TriggerTrap(i);
@@ -1080,17 +1128,20 @@ void DndDemoScene::CheckTraps(f32 dt) {
         case TrapType::SPIKE:
             if (trap.cooldownTimer <= 0.0f) TriggerTrap(trapIdx);
             break;
+        case TrapType::PRESSURE_PLATE:
+            TriggerTrap(trapIdx);
+            break;
         case TrapType::TELEPORTER:
             if (trap.cooldownTimer <= 0.0f) {
                 TriggerTrap(trapIdx);
                 // After teleport, re-check the new cell for traps
                 Cell newFc = WorldToCell(rt->position);
                 i32 newTrap = TrapAt(newFc.x, newFc.y);
-                if (newTrap >= 0) TriggerTrap(newTrap);
+                if (newTrap >= 0 && m_outcome == DemoOutcome::ONGOING) TriggerTrap(newTrap);
             }
             break;
         default:
-            break; // PRESSURE_PLATE, LEVER, CRUMBLING handled elsewhere
+            break; // LEVER is pulled by hand, CRUMBLING is timed
     }
 }
 
@@ -1166,6 +1217,291 @@ void DndDemoScene::CheckEnemyDetection() {
     UpdateFogVisibility();
 }
 
+const char* DndDemoScene::ActorName(Entity e) const {
+    const Tag* tag = m_componentRegistry.GetComponent<Tag>(e);
+    if (tag && tag->name && tag->name[0] != '\0') return tag->name;
+    return (e == m_rogue) ? "Finn" : "The foe";
+}
+
+void DndDemoScene::CancelMotion() {
+    if ((m_lungePhase == LungePhase::OUT || m_lungePhase == LungePhase::BACK) &&
+        m_lungeAttacker.IsValid()) {
+        if (Transform* at = m_componentRegistry.GetComponent<Transform>(m_lungeAttacker))
+            at->position = m_lungeHome;
+    }
+    if (m_flyingProjectile.IsValid()) {
+        if (MeshRenderer* pr = m_componentRegistry.GetComponent<MeshRenderer>(m_flyingProjectile))
+            pr->visible = false;
+        if (Transform* pt = m_componentRegistry.GetComponent<Transform>(m_flyingProjectile))
+            pt->position = Vec3(0.0f, -100.0f, 0.0f);
+    }
+    m_lungePhase = LungePhase::IDLE;
+    m_lungeT = 0.0f;
+    m_mazeAttack = false;
+    m_strikeIsEnemy = false;
+}
+
+void DndDemoScene::OnVictory() {
+    if (m_outcome == DemoOutcome::VICTORY) return;
+    m_outcome = DemoOutcome::VICTORY;
+    m_walking = false;
+    m_exploring = false;
+    m_pickPending = false;
+    m_descentPending = false;
+    m_lockPhase = LockPhase::IDLE;
+    CancelMotion();
+    EndEncounter(false);
+    PushLog("The lock gives. Gold, and a way back to daylight, spill out of the dark.");
+    PushLog("--- VICTORY! Finn climbs out of the dungeon. ---");
+}
+
+void DndDemoScene::OnDefeat(const char* how) {
+    if (m_outcome == DemoOutcome::DEFEAT) return;
+    m_outcome = DemoOutcome::DEFEAT;
+    m_walking = false;
+    m_exploring = false;
+    m_pickPending = false;
+    m_descentPending = false;
+    m_lockPhase = LockPhase::IDLE;
+    m_inEncounter = false;
+    m_awaitingPlayer = false;
+    m_turnDelay = 0.0f;
+    if (m_combatSystem) m_combatSystem->GetState().EndCombat();
+    CancelMotion();
+    if (how && how[0] != '\0') PushLog(how);
+    PushLog("--- DEFEAT. Finn collapses. The dungeon keeps what it takes. ---");
+}
+
+void DndDemoScene::EndEncounter(b8 resumeTravel) {
+    m_inEncounter = false;
+    m_awaitingPlayer = false;
+    m_turnDelay = 0.0f;
+    m_ambush = false;
+    m_strikeIsEnemy = false;
+    m_encounterFoe = Entity::None();
+    m_blockingEnemy = Entity::None();
+    if (m_combatSystem) m_combatSystem->GetState().EndCombat();
+    if (m_outcome != DemoOutcome::ONGOING || !resumeTravel) return;
+
+    const b8 resumed = (m_exploring && !m_chestFound) ? StartExplore() : RepathToExit();
+    PushLog(resumed ? "The way clears -- Finn presses on."
+                    : "The fight is over. Finn waits for a command.");
+}
+
+void DndDemoScene::AnnounceTurn() {
+    if (!m_inEncounter || m_outcome != DemoOutcome::ONGOING) return;
+    if (!m_combatSystem || !m_combatSystem->GetState().isActive) {
+        m_awaitingPlayer = true;
+        m_turnDelay = 0.0f;
+        PushLog("Finn's turn -- attack, disengage, or drink.");
+        return;
+    }
+
+    CombatState& st = m_combatSystem->GetState();
+    if (st.initiativeOrder.empty()) {
+        EndEncounter(false);
+        PushLog("The fight fades -- nobody is left standing to trade blows.");
+        return;
+    }
+
+    const Entity cur = st.GetCurrentEntity();
+    const HitPoints* hp = m_componentRegistry.GetComponent<HitPoints>(cur);
+    if (!cur.IsValid() || !hp || !hp->IsAlive()) {
+        if (!st.RemoveEntity(cur)) {
+            EndEncounter(false);
+            return;
+        }
+        AnnounceTurn();
+        return;
+    }
+
+    if (cur == m_rogue) {
+        m_awaitingPlayer = true;
+        m_turnDelay = 0.0f;
+        PushLog("Finn's turn -- attack, disengage, or drink.");
+    } else {
+        m_awaitingPlayer = false;
+        char b[128];
+        std::snprintf(b, sizeof(b), "%s's turn.", ActorName(cur));
+        PushLog(b);
+        m_turnDelay = 0.75f;
+    }
+}
+
+void DndDemoScene::BeginEncounter(Entity foe) {
+    if (m_outcome != DemoOutcome::ONGOING || !foe.IsValid()) return;
+    const HitPoints* hp = m_componentRegistry.GetComponent<HitPoints>(foe);
+    if (!hp || !hp->IsAlive()) return;
+    if (m_inEncounter && m_encounterFoe == foe) return;
+
+    m_inEncounter = true;
+    m_encounterFoe = foe;
+    m_blockingEnemy = foe;
+    m_walking = false;
+    m_awaitingPlayer = false;
+    m_turnDelay = 0.0f;
+    m_strikeIsEnemy = false;
+
+    const i32 ti = EnemyIndex(foe);
+    m_ambush = (ti >= 0 && !m_enemyAlerted[ti]);
+
+    char b[192];
+    std::snprintf(b, sizeof(b), "-- combat: Finn vs %s --", ActorName(foe));
+    PushLog(b);
+
+    if (!m_combatSystem) {
+        m_awaitingPlayer = true;
+        PushLog("Finn's turn -- attack, disengage, or drink.");
+        return;
+    }
+
+    std::vector<Entity> parts;
+    parts.push_back(m_rogue);
+    parts.push_back(foe);
+    CombatState& st = m_combatSystem->GetState();
+    st.RollInitiative(m_entityManager, m_componentRegistry, parts);
+
+    // An unaware foe doesn't get to act before the opening strike. Finn still
+    // only takes one action; the foe swings on the following turn.
+    if (m_ambush && !st.initiativeOrder.empty() && st.initiativeOrder[0] != m_rogue) {
+        for (size_t i = 1; i < st.initiativeOrder.size(); ++i) {
+            if (st.initiativeOrder[i] == m_rogue) {
+                std::swap(st.initiativeOrder[0], st.initiativeOrder[i]);
+                break;
+            }
+        }
+        st.currentTurn = 0;
+    }
+
+    if (m_ambush) {
+        std::snprintf(b, sizeof(b), "%s hasn't noticed Finn. He seizes the initiative.", ActorName(foe));
+        PushLog(b);
+    }
+    for (const Entity e : st.initiativeOrder) {
+        const Initiative* init = m_componentRegistry.GetComponent<Initiative>(e);
+        std::snprintf(b, sizeof(b), "  %s initiative %d", ActorName(e), init ? init->total : 0);
+        PushLog(b);
+    }
+    AnnounceTurn();
+}
+
+void DndDemoScene::FinishCombatAction() {
+    if (m_outcome != DemoOutcome::ONGOING || !m_inEncounter) return;
+
+    const HitPoints* foeHP = m_componentRegistry.GetComponent<HitPoints>(m_encounterFoe);
+    if (!foeHP || !foeHP->IsAlive()) {
+        EndEncounter(true);
+        return;
+    }
+    const HitPoints* finn = m_componentRegistry.GetComponent<HitPoints>(m_rogue);
+    if (!finn || !finn->IsAlive()) {
+        OnDefeat("The last blow lands.");
+        return;
+    }
+    if (m_combatSystem && m_combatSystem->GetState().isActive) {
+        m_combatSystem->GetState().NextTurn();
+    }
+    AnnounceTurn();
+}
+
+void DndDemoScene::StartEnemyStrike() {
+    if (m_outcome != DemoOutcome::ONGOING || !m_inEncounter) return;
+    const HitPoints* hp = m_componentRegistry.GetComponent<HitPoints>(m_encounterFoe);
+    if (!hp || !hp->IsAlive()) {
+        FinishCombatAction();
+        return;
+    }
+    const Transform* rt = m_componentRegistry.GetComponent<Transform>(m_rogue);
+    const Transform* et = m_componentRegistry.GetComponent<Transform>(m_encounterFoe);
+    if (!rt || !et) {
+        ResolveEnemyStrike();
+        if (m_outcome == DemoOutcome::ONGOING) FinishCombatAction();
+        return;
+    }
+
+    char b[160];
+    std::snprintf(b, sizeof(b), "%s lunges at Finn!", ActorName(m_encounterFoe));
+    PushLog(b);
+
+    m_lungeAttacker = m_encounterFoe;
+    m_lungeHome = et->position;
+    Vec3 dir = (rt->position - et->position).Normalized();
+    if (dir.LengthSquared() < 0.0001f) dir = Vec3(1.0f, 0.0f, 0.0f);
+    m_lungeBump = Vec3(rt->position.x - dir.x * 1.05f, et->position.y,
+                       rt->position.z - dir.z * 1.05f);
+    m_attackTarget = m_rogue;
+    m_strikeIsEnemy = true;
+    m_mazeAttack = true;
+    m_lungePhase = LungePhase::OUT;
+    m_lungeT = 0.0f;
+}
+
+void DndDemoScene::ResolveEnemyStrike() {
+    const Entity foe = m_encounterFoe;
+    const i32 ti = EnemyIndex(foe);
+    const EnemyType etype = (ti >= 0 && static_cast<size_t>(ti) < m_enemyTypes.size())
+                            ? m_enemyTypes[ti] : EnemyType::GOBLIN;
+    const char* fname = ActorName(foe);
+
+    const CharacterInfo* finfo = m_componentRegistry.GetComponent<CharacterInfo>(foe);
+    const i32 gStr  = finfo ? AbilityScores::GetModifier(finfo->abilities.strength) : 1;
+    const i32 gProf = finfo ? finfo->proficiencyBonus : 2;
+    HitPoints*        fhp = m_componentRegistry.GetComponent<HitPoints>(m_rogue);
+    const ArmorClass* fac = m_componentRegistry.GetComponent<ArmorClass>(m_rogue);
+    const i32 finnAC = fac ? fac->GetTotal() : 13;
+    const i32 eroll = DiceRoller::Roll(1, 20);
+    i32 reprisalDie = 4;
+    const char* reprisalWeapon = "dagger";
+    switch (etype) {
+        case EnemyType::SKELETON:
+            reprisalDie = 6; reprisalWeapon = "shortsword"; break;
+        case EnemyType::BUGBEAR:
+            reprisalDie = 8; reprisalWeapon = "heavy club"; break;
+        default: break;
+    }
+
+    char b[256];
+    const i32 atkMod = gStr + gProf;
+    if (fhp && (eroll == 20 || (eroll != 1 && eroll + atkMod >= finnAC))) {
+        i32 edmg = DiceRoller::Roll(1, reprisalDie) + gStr;
+        if (edmg < 1) edmg = 1;
+        fhp->TakeDamage(edmg);
+        std::snprintf(b, sizeof(b),
+                      "%s strikes with %s: d20 %d %+d = %d vs AC %d -- HIT for %d! (Finn %d/%d)",
+                      fname, reprisalWeapon, eroll, atkMod, eroll + atkMod, finnAC,
+                      edmg, fhp->current, fhp->maximum);
+        PushLog(b);
+        if (!fhp->IsAlive()) OnDefeat("The blow drops Finn.");
+    } else {
+        std::snprintf(b, sizeof(b),
+                      "%s strikes with %s: d20 %d %+d = %d vs AC %d -- Finn turns it aside.",
+                      fname, reprisalWeapon, eroll, atkMod, eroll + atkMod, finnAC);
+        PushLog(b);
+    }
+}
+
+void DndDemoScene::HandleExitArrival() {
+    m_walking = false;
+    m_exploring = false;
+    m_pickPending = false;
+    if (m_outcome != DemoOutcome::ONGOING) return;
+    if (m_inEncounter) {
+        PushLog("The way forward is right there, but the fight isn't over.");
+        return;
+    }
+    if (m_currentFloor == 0) {
+        PushLog("Finn reaches the locked chest. Type \"pick the lock\".");
+        return;
+    }
+    if (IsFinalFloor()) {
+        PushLog("Finn stands before the sealed reliquary. Type \"pick the lock\" to finish the delve.");
+        return;
+    }
+    PushLog("Finn steps onto the stairs. Stone grinds, and the dark below swallows the torchlight.");
+    m_descentPending = true;
+    m_descentTimer = 2.0f;
+}
+
 b8 DndDemoScene::RepathToExit() {
     const Transform* rt = m_componentRegistry.GetComponent<Transform>(m_rogue);
     if (!rt) return false;
@@ -1185,7 +1521,10 @@ void DndDemoScene::ResolveMazeAttack() {
     const ArmorClass* ac = m_componentRegistry.GetComponent<ArmorClass>(foe);
     const Tag*       ftag = m_componentRegistry.GetComponent<Tag>(foe);
     const char* fname = (ftag && ftag->name) ? ftag->name : "the goblin";
-    if (!hp || !ac) return;
+    if (!hp || !ac) {
+        PushLog("The strike finds no purchase.");
+        return;
+    }
 
     // Determine enemy type
     const i32 ti = EnemyIndex(foe);
@@ -1215,7 +1554,7 @@ void DndDemoScene::ResolveMazeAttack() {
         std::snprintf(b, sizeof(b), "%sFinn swings: d20 %d %+d = %d vs AC %d -- miss.",
                       sneak ? "From hiding -- " : "", roll, atkMod, roll + atkMod, targetAC);
         PushLog(b);
-        return;  // a whiffed lunge: Finn pulls back, the exchange is a wash
+        return;  // miss ends Finn's action; the foe still gets their turn
     }
     i32 dmg = DiceRoller::Roll(1, 6) + dexMod;     // shortsword 1d6 + DEX
     if (crit)  dmg += DiceRoller::Roll(1, 6);      // crit: extra weapon die
@@ -1294,38 +1633,7 @@ void DndDemoScene::ResolveMazeAttack() {
             }
         }
 
-        return;                                    // dead -- no reprisal
-    }
-
-    // Still standing: the enemy attacks back. Damage die depends on type.
-    const CharacterInfo* finfo = m_componentRegistry.GetComponent<CharacterInfo>(foe);
-    const i32 gStr  = finfo ? AbilityScores::GetModifier(finfo->abilities.strength) : 1;
-    const i32 gProf = finfo ? finfo->proficiencyBonus : 2;
-    HitPoints*        fhp = m_componentRegistry.GetComponent<HitPoints>(m_rogue);
-    const ArmorClass* fac = m_componentRegistry.GetComponent<ArmorClass>(m_rogue);
-    const i32 finnAC = fac ? fac->GetTotal() : 13;
-    const i32 eroll = DiceRoller::Roll(1, 20);
-    i32 reprisalDie = 4; // default: dagger 1d4
-    const char* reprisalWeapon = "dagger";
-    switch (etype) {
-        case EnemyType::SKELETON:
-            reprisalDie = 6; reprisalWeapon = "shortsword"; break;
-        case EnemyType::BUGBEAR:
-            reprisalDie = 8; reprisalWeapon = "heavy club"; break;
-        default: break; // goblin uses default dagger
-    }
-    if (fhp && (eroll == 20 || (eroll != 1 && eroll + gStr + gProf >= finnAC))) {
-        i32 edmg = DiceRoller::Roll(1, reprisalDie) + gStr;
-        if (edmg < 1) edmg = 1;
-        fhp->TakeDamage(edmg);
-        if (fhp->current <= 0) fhp->current = 1;    // no death system in this layer -- Finn stays up
-        std::snprintf(b, sizeof(b), "%s lashes back with %s for %d! (Finn %d/%d)",
-                      fname, reprisalWeapon, edmg, fhp->current, fhp->maximum);
-        PushLog(b);
-    } else {
-        std::snprintf(b, sizeof(b), "%s lashes back with %s -- Finn turns it aside.",
-                      fname, reprisalWeapon);
-        PushLog(b);
+        return;                                    // dead -- their turn never comes
     }
 }
 
@@ -1457,6 +1765,10 @@ void DndDemoScene::DoPickup() {
         char b[128];
         std::snprintf(b, sizeof(b), "Finn pockets %s.", itemName);
         PushLog(b);
+        if (std::strstr(itemName, "potion") || std::strstr(itemName, "healing"))
+            PushLog("It's in the pack. Type \"drink\" when Finn needs the hit points.");
+        else if (!actualItem)
+            PushLog("It isn't in the gear ledger, so it won't show up under \"inventory\".");
         ++grabbed;
     }
     if (grabbed == 0) {
@@ -1654,6 +1966,15 @@ void DndDemoScene::OnUpdate(f32 deltaTime) {
     if (m_lightSliderI) m_lightIntensity = m_lightSliderI->GetValue();
     UpdateKeyLight();
 
+    // Win/lose freezes the delve. The log and the banner are the feedback.
+    if (m_outcome != DemoOutcome::ONGOING) {
+        if (const Transform* hero = m_componentRegistry.GetComponent<Transform>(m_rogue))
+            Engine::SetCameraFocus(Vec3(hero->position.x, 0.5f, hero->position.z));
+        AnimateRigs(deltaTime);
+        UpdateShadows();
+        return;
+    }
+
     // Floor descent timer: after opening the chest, wait a beat then descend.
     if (m_descentPending) {
         m_descentTimer -= deltaTime;
@@ -1748,14 +2069,19 @@ void DndDemoScene::OnUpdate(f32 deltaTime) {
             if (at) at->position = LerpVec(m_lungeHome, m_lungeBump, e);
             if (m_lungeT >= 1.0f) {
                 if (m_mazeAttack) {
-                    ResolveMazeAttack();             // roll Finn's strike + the goblin's reprisal
+                    if (m_strikeIsEnemy) ResolveEnemyStrike();
+                    else ResolveMazeAttack();
                 } else {
                     const CombatAction& a = m_replayActions[m_replayIndex];
                     m_combatSystem->QueueAction(a);
                     PushLog(a.description ? a.description : "(acts)");
                 }
-                m_lungePhase = LungePhase::BACK;
-                m_lungeT = 0.0f;
+                if (m_outcome != DemoOutcome::ONGOING) {
+                    CancelMotion(); // a killing blow ends the swing where it landed
+                } else {
+                    m_lungePhase = LungePhase::BACK;
+                    m_lungeT = 0.0f;
+                }
             }
         } else { // BACK
             if (at) at->position = LerpVec(m_lungeBump, m_lungeHome, e);
@@ -1764,16 +2090,9 @@ void DndDemoScene::OnUpdate(f32 deltaTime) {
                 m_lungePhase = LungePhase::IDLE;
                 if (m_mazeAttack) {
                     m_mazeAttack = false;
-                    const HitPoints* thp = m_componentRegistry.GetComponent<HitPoints>(m_attackTarget);
-                    if (!thp || !thp->IsAlive()) {
-                        m_blockingEnemy = Entity::None();
-                        // Resume whatever Finn was doing: exploring the unknown, or
-                        // heading for the (now-known) chest.
-                        const b8 resumed = (m_exploring && !m_chestFound) ? StartExplore()
-                                                                          : RepathToExit();
-                        if (resumed) PushLog("The way clears -- Finn presses on.");
-                    }
-                    // else: the goblin still bars the path -- the player can "attack" again.
+                    m_strikeIsEnemy = false;
+                    if (m_outcome == DemoOutcome::ONGOING && m_inEncounter)
+                        FinishCombatAction();
                 } else {
                     ++m_replayIndex;
                     if (m_replayIndex == m_replayActions.size()) {
@@ -1781,6 +2100,22 @@ void DndDemoScene::OnUpdate(f32 deltaTime) {
                     }
                 }
             }
+        }
+    }
+
+    if (m_outcome != DemoOutcome::ONGOING) {
+        AnimateRigs(deltaTime);
+        UpdateShadows();
+        return;
+    }
+
+    // Enemy turns play themselves out after a short, readable beat.
+    if (m_inEncounter && m_lungePhase == LungePhase::IDLE &&
+        !m_awaitingPlayer && m_turnDelay > 0.0f) {
+        m_turnDelay -= deltaTime;
+        if (m_turnDelay <= 0.0f) {
+            m_turnDelay = 0.0f;
+            StartEnemyStrike();
         }
     }
 
@@ -1825,6 +2160,10 @@ void DndDemoScene::OnUpdate(f32 deltaTime) {
             if (!act.ok) {
                 PushLog(std::string("AI DM error (") + (act.error.empty() ? "?" : act.error) +
                         ") -- the moment passes.");
+            } else if (m_outcome != DemoOutcome::ONGOING) {
+                PushLog("The moment has passed.");
+            } else if (m_inEncounter && !m_awaitingPlayer) {
+                PushLog("Hold -- it isn't Finn's turn.");
             } else {
                 ExecuteAction(act, true);
             }
@@ -1844,14 +2183,13 @@ void DndDemoScene::OnUpdate(f32 deltaTime) {
             if (ok) {
                 m_chestOpen = true;
                 m_lockPhase = LockPhase::IDLE;
-                if (m_currentFloor < kMaxFloors - 1) {
+                if (IsFinalFloor()) {
+                    OnVictory();
+                } else {
                     PushLog("The lock clicks open. Inside glints a rough-hewn dungeon key.");
                     PushLog("A grinding noise -- stone stairs descend into darkness!");
                     m_descentPending = true;
                     m_descentTimer = 3.0f;
-                } else {
-                    PushLog("The lock clicks open; the chest creaks wide -- treasure beyond Finn's dreams!");
-                    PushLog("--- VICTORY! Finn emerges from the dungeon, laden with gold! ---");
                 }
             } else {
                 PushLog("The pick slips -- the lock holds fast. Press SPACE to try again.");
@@ -1871,26 +2209,15 @@ void DndDemoScene::OnUpdate(f32 deltaTime) {
                 const Entity foe = LivingEnemyAt(m_path[m_pathIndex + 1]);
                 if (foe.IsValid()) {
                     m_walking = false;
-                    const b8 newBlock = (foe != m_blockingEnemy); // only announce once
-                    m_blockingEnemy = foe;
-                    if (newBlock) {
-                        const i32 ei = EnemyIndex(foe);
-                        const Tag* ft = m_componentRegistry.GetComponent<Tag>(foe);
-                        const char* nm = (ft && ft->name) ? ft->name : "A goblin";
-                        char b[176];
-                        if (ei >= 0 && m_enemyAlerted[ei])
-                            std::snprintf(b, sizeof(b), "%s bars the corridor, blade raised! Type \"attack\".", nm);
-                        else
-                            std::snprintf(b, sizeof(b), "%s stands oblivious in the corridor -- type \"attack\" to strike from the shadows!", nm);
-                        PushLog(b);
-                    }
+                    BeginEncounter(foe);
                 }
             }
-            // Heading to the chest to pick its lock: stop in the cell just before it
-            // and kneel, rather than stepping onto the chest.
+            // Heading to a locked chest: stop in the cell just before it and kneel.
+            // Stairs (middle floors) are stepped on instead, which descends.
             if (m_walking && m_pickPending && m_walkT == 0.0f) {
                 const Cell nxt = m_path[m_pathIndex + 1];
-                if (nxt.x == kExitX && nxt.y == kExitY) {
+                if (nxt.x == kExitX && nxt.y == kExitY &&
+                    (m_currentFloor == 0 || IsFinalFloor())) {
                     m_walking = false;
                     m_pickPending = false;
                     PushLog("Finn reaches the locked chest and kneels at the lock.");
@@ -1911,16 +2238,25 @@ void DndDemoScene::OnUpdate(f32 deltaTime) {
                     RevealAround(m_path[m_pathIndex]);
                     UpdateFogVisibility();
                     if (!wasFound && m_chestFound) {
-                        m_walking = false;
-                        m_exploring = false;
-                        if (m_currentFloor > 0) {
-                            PushLog("A faint magical glow marks the way deeper into the dungeon!");
-                            m_descentPending = true;
-                            m_descentTimer = 2.0f;
-                        } else {
+                        const Cell stepped = m_path[m_pathIndex];
+                        const b8 onExit = (stepped.x == kExitX && stepped.y == kExitY);
+                        if (onExit) {
+                            HandleExitArrival();
+                        } else if (m_currentFloor == 0) {
+                            m_walking = false;
+                            m_exploring = false;
                             PushLog("Finn rounds a corner -- a locked chest sits in the gloom ahead!");
                             PushLog("Type \"pick the lock\" to go for it.");
+                        } else if (IsFinalFloor()) {
+                            m_walking = false;
+                            m_exploring = false;
+                            PushLog("A sealed reliquary gleams ahead.");
+                            PushLog("Type \"pick the lock\" when Finn reaches it.");
+                        } else {
+                            PushLog("Stone stairs descend ahead. Keep exploring, or walk onto them to go deeper.");
                         }
+                    } else if (m_path[m_pathIndex].x == kExitX && m_path[m_pathIndex].y == kExitY) {
+                        HandleExitArrival();
                     }
                 } else {
                     rt->position = LerpVec(a, b, m_walkT);
@@ -1939,14 +2275,10 @@ void DndDemoScene::OnUpdate(f32 deltaTime) {
                 }
             } else if (m_exploring) {
                 m_exploring = false;                   // chest found mid-walk (already announced)
-            } else if (m_chestFound) {
-                if (m_currentFloor > 0) {
-                    PushLog("Finn reaches the passage to the next depth.");
-                    m_descentPending = true;
-                    m_descentTimer = 2.0f;
-                } else {
-                    PushLog("Finn reaches the chest.");
-                }
+            } else if (m_chestFound && rt) {
+                const Cell here = WorldToCell(rt->position);
+                if (here.x == kExitX && here.y == kExitY) HandleExitArrival();
+                else PushLog("Finn pauses.");
             } else if (rt) {
                 PushLog("Finn stops.");
             }
@@ -1959,6 +2291,11 @@ void DndDemoScene::OnUpdate(f32 deltaTime) {
     bool   haloActive = false;
     if (m_lockPhase != LockPhase::IDLE) {
         haloActor = m_rogue; haloActive = true;                 // it's the rogue's turn
+    } else if (m_inEncounter && m_combatSystem && m_combatSystem->GetState().isActive) {
+        haloActor = m_combatSystem->GetState().GetCurrentEntity();
+        haloActive = haloActor.IsValid();
+    } else if (m_lungePhase != LungePhase::IDLE && m_lungeAttacker.IsValid()) {
+        haloActor = m_lungeAttacker; haloActive = true;
     } else if (m_replayIndex < m_replayActions.size()) {
         haloActor = m_replayActions[m_replayIndex].source; haloActive = true;
     }
@@ -2045,20 +2382,25 @@ void DndDemoScene::SetupUI() {
 void DndDemoScene::PushLog(const std::string& line) {
     DND_LOG_INFO("[log] %s", line.c_str());   // also persist narration to engine.log
     m_combatLog.push_back(line);
-    const size_t kMaxLines = 8;
+    const size_t kMaxLines = 12;
     if (m_combatLog.size() > kMaxLines) {
         m_combatLog.erase(m_combatLog.begin());
     }
 }
 
 void DndDemoScene::TryStartLockPick(i32 dc, const std::string& flavor) {
+    if (m_outcome != DemoOutcome::ONGOING) return;
+    if (m_inEncounter) {
+        PushLog("Not while blades are out -- finish the fight or disengage.");
+        return;
+    }
     if (m_lockPhase != LockPhase::IDLE || m_pickPending) return;   // already on it
     if (m_lungePhase != LungePhase::IDLE || m_replayIndex < m_replayActions.size()) {
         PushLog("Finn is busy in the melee -- let the round finish first.");
         return;
     }
-    if (m_currentFloor > 0) {
-        PushLog("There's no chest here -- the only way is deeper into the dungeon.");
+    if (m_currentFloor > 0 && !IsFinalFloor()) {
+        PushLog("There's no lock here -- step onto the stairs to descend.");
         return;
     }
     if (!m_chestFound) {
@@ -2102,10 +2444,18 @@ void DndDemoScene::BeginLockRoll() {
 }
 
 void DndDemoScene::Command(const std::string& intent) {
+    if (m_outcome != DemoOutcome::ONGOING) {
+        PushLog(m_outcome == DemoOutcome::VICTORY ? "The delve is already won." : "Finn cannot act.");
+        return;
+    }
     if (m_awaitingAi) { PushLog("(the DM is already resolving something...)"); return; }
     if (m_lungePhase != LungePhase::IDLE || m_replayIndex < m_replayActions.size() ||
         m_lockPhase != LockPhase::IDLE) {
         PushLog("Wait -- something's already happening.");
+        return;
+    }
+    if (m_inEncounter && !m_awaitingPlayer) {
+        PushLog("Hold -- it isn't Finn's turn.");
         return;
     }
     PushLog(std::string("> ") + intent);
@@ -2166,6 +2516,10 @@ b8 DndDemoScene::ParseIntentLocal(const std::string& text, AiAction& out) {
         out.action = "inventory"; out.ability = ""; out.skill = ""; out.dc = 0;
         out.narration = "Finn checks his pack.";
         out.ok = true; return true;
+    } else if (has("disengage") || has("retreat") || has("withdraw") || has("fall back")) {
+        out.action = "disengage"; out.ability = "DEX"; out.skill = "Acrobatics"; out.dc = 0;
+        out.narration = "Finn gives ground, looking for a way out of the blades.";
+        out.ok = true; return true;
     } else if (has("attack") || has("hit") || has("strike") || has("stab") ||
                has("slash") || has("shoot") || has("swing")) {
         out.action = "attack"; out.ability = "DEX"; out.skill = "Attack"; out.dc = 12;
@@ -2178,6 +2532,24 @@ b8 DndDemoScene::ParseIntentLocal(const std::string& text, AiAction& out) {
 }
 
 void DndDemoScene::ExecuteAction(const AiAction& act, b8 fromAi) {
+    if (m_inEncounter &&
+        act.action != "attack" && act.action != "drink" &&
+        act.action != "disengage" && act.action != "inventory") {
+        PushLog("Blades are drawn -- Finn can attack, disengage, or drink.");
+        return;
+    }
+
+    if (act.action == "disengage") {
+        if (!m_inEncounter) {
+            PushLog("Finn isn't in a fight.");
+            return;
+        }
+        if (!act.narration.empty()) PushLog(act.narration);
+        PushLog("Finn breaks off the melee.");
+        EndEncounter(false);
+        return;
+    }
+
     // Movement: explore the unknown maze, or (once found) head to the chest.
     if (act.action == "goto") {
         if (!act.narration.empty()) PushLog(act.narration);
@@ -2187,8 +2559,11 @@ void DndDemoScene::ExecuteAction(const AiAction& act, b8 fromAi) {
                 if (m_currentFloor == 0) {
                     std::snprintf(b, sizeof(b), "Finn threads the maze toward the chest (%d steps).",
                                   static_cast<i32>(m_path.size()) - 1);
+                } else if (IsFinalFloor()) {
+                    std::snprintf(b, sizeof(b), "Finn threads the catacombs toward the reliquary (%d steps).",
+                                  static_cast<i32>(m_path.size()) - 1);
                 } else {
-                    std::snprintf(b, sizeof(b), "Finn follows the passage deeper (%d steps).",
+                    std::snprintf(b, sizeof(b), "Finn follows the passage toward the stairs (%d steps).",
                                   static_cast<i32>(m_path.size()) - 1);
                 }
                 PushLog(b);
@@ -2207,10 +2582,10 @@ void DndDemoScene::ExecuteAction(const AiAction& act, b8 fromAi) {
         return;
     }
 
-    // Combat: a real melee attack against the goblin blocking the corridor (or the
-    // nearest one in reach). The strike + reprisal resolve at the lunge's bump.
+    // Combat: open an encounter if needed, then spend Finn's action on a strike.
+    // The foe answers on their own turn (see StartEnemyStrike).
     if (act.action == "attack") {
-        Entity foe = m_blockingEnemy;
+        Entity foe = m_inEncounter ? m_encounterFoe : m_blockingEnemy;
         const HitPoints* bhp = foe.IsValid() ? m_componentRegistry.GetComponent<HitPoints>(foe) : nullptr;
         if (!bhp || !bhp->IsAlive()) {
             foe = Entity::None();
@@ -2234,7 +2609,16 @@ void DndDemoScene::ExecuteAction(const AiAction& act, b8 fromAi) {
             PushLog("There's nothing in reach to strike.");
             return;
         }
+        if (!m_inEncounter) {
+            BeginEncounter(foe);
+            if (!m_awaitingPlayer) {
+                PushLog("They move before Finn can strike.");
+                return;
+            }
+        }
         if (!act.narration.empty()) PushLog(act.narration);
+        m_awaitingPlayer = false;
+        m_strikeIsEnemy = false;
         m_lungeAttacker = m_rogue;
         m_lungeHome = rt->position;
         const Vec3 dir = (et->position - rt->position).Normalized();
@@ -2252,7 +2636,8 @@ void DndDemoScene::ExecuteAction(const AiAction& act, b8 fromAi) {
         if (!act.narration.empty()) PushLog(act.narration);
         Inventory* inv = m_componentRegistry.GetComponent<Inventory>(m_rogue);
         HitPoints* hp = m_componentRegistry.GetComponent<HitPoints>(m_rogue);
-        if (inv && hp && inv->GetItemCount("Potion of Healing") > 0) {
+        b8 drank = false;
+        if (inv && hp && hp->IsAlive() && inv->GetItemCount("Potion of Healing") > 0) {
             inv->RemoveItem("Potion of Healing", 1);
             const i32 heal = DiceRoller::Roll(2, 4) + 2;
             hp->Heal(heal);
@@ -2260,8 +2645,13 @@ void DndDemoScene::ExecuteAction(const AiAction& act, b8 fromAi) {
             std::snprintf(b, sizeof(b), "Finn regains %d hit points. (%d/%d)",
                           heal, hp->current, hp->maximum);
             PushLog(b);
+            drank = true;
         } else {
             PushLog("Finn has no potions to drink.");
+        }
+        if (drank && m_inEncounter) {
+            m_awaitingPlayer = false;
+            FinishCombatAction();
         }
         return;
     }
@@ -2487,7 +2877,13 @@ void DndDemoScene::OnRenderOverlay(f32 screenW, f32 screenH) {
         const std::string line = std::string("> ") + Input::GetTextInput() + "_";
         UIRenderer::DrawText(16.0f, boxY + 7.0f, line.c_str(), Vec4(0.95f, 0.95f, 0.70f, 1.0f), 13.0f);
     } else {
-        UIRenderer::DrawText(screenW - 250.0f, screenH - 22.0f, "[Enter] type a command",
+        const char* hint = "[Enter] explore, search, pick up";
+        if (m_outcome == DemoOutcome::VICTORY) hint = "Victory -- the delve is done.";
+        else if (m_outcome == DemoOutcome::DEFEAT) hint = "Defeat -- Finn has fallen.";
+        else if (m_inEncounter && m_awaitingPlayer) hint = "Your turn: attack, disengage, or drink";
+        else if (m_inEncounter) hint = "Enemy turn...";
+        else if (m_lockPhase == LockPhase::AWAIT_ROLL) hint = "Press SPACE to roll the lock";
+        UIRenderer::DrawText(screenW - 340.0f, screenH - 22.0f, hint,
                              Vec4(0.60f, 0.60f, 0.66f, 1.0f), 10.0f);
     }
 
@@ -2551,6 +2947,44 @@ void DndDemoScene::OnRenderOverlay(f32 screenW, f32 screenH) {
                     break;
                 }
             }
+        }
+    }
+
+    // ---- Loop state: explore / whose turn / win / lose ----
+    {
+        const char* phase = "Exploring";
+        Vec4 phaseCol(0.70f, 0.92f, 0.70f, 1.0f);
+        if (m_outcome == DemoOutcome::VICTORY) {
+            phase = "Victory";
+            phaseCol = Vec4(1.0f, 0.86f, 0.40f, 1.0f);
+        } else if (m_outcome == DemoOutcome::DEFEAT) {
+            phase = "Defeat";
+            phaseCol = Vec4(1.0f, 0.35f, 0.30f, 1.0f);
+        } else if (m_lockPhase == LockPhase::AWAIT_ROLL) {
+            phase = "Picking the lock";
+            phaseCol = Vec4(1.0f, 0.90f, 0.45f, 1.0f);
+        } else if (m_inEncounter && m_awaitingPlayer) {
+            phase = "Your turn";
+            phaseCol = Vec4(1.0f, 0.86f, 0.40f, 1.0f);
+        } else if (m_inEncounter) {
+            phase = "Enemy turn";
+            phaseCol = Vec4(0.96f, 0.55f, 0.45f, 1.0f);
+        }
+        char mode[96];
+        std::snprintf(mode, sizeof(mode), "Floor %d/%d   %s",
+                      m_currentFloor + 1, kMaxFloors, phase);
+        const f32 modeW = static_cast<f32>(std::strlen(mode)) * 11.0f;
+        UIRenderer::DrawText(screenW * 0.5f - modeW * 0.5f, 14.0f, mode, phaseCol, 13.0f);
+
+        if (m_inEncounter && m_combatSystem && m_combatSystem->GetState().isActive) {
+            const Entity cur = m_combatSystem->GetState().GetCurrentEntity();
+            const Initiative* init = m_componentRegistry.GetComponent<Initiative>(cur);
+            char who[128];
+            std::snprintf(who, sizeof(who), "%s  (initiative %d)",
+                          ActorName(cur), init ? init->total : 0);
+            const f32 whoW = static_cast<f32>(std::strlen(who)) * 9.0f;
+            UIRenderer::DrawText(screenW * 0.5f - whoW * 0.5f, 32.0f, who,
+                                 Vec4(0.90f, 0.90f, 0.95f, 1.0f), 11.0f);
         }
     }
 

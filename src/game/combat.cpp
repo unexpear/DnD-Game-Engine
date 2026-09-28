@@ -18,61 +18,86 @@
 
 namespace Dnd {
 
+namespace {
+
+/// @brief d20 (+ advantage) + modifier. Leaves Initiative::value unchanged.
+i32 RollOneInitiative(Initiative& init) {
+    i32 d20;
+    if (init.hasAdvantage) {
+        const i32 r1 = DiceRoller::Roll(1, 20);
+        const i32 r2 = DiceRoller::Roll(1, 20);
+        d20 = (r1 > r2) ? r1 : r2;
+    } else {
+        d20 = DiceRoller::Roll(1, 20);
+    }
+    init.total = d20 + init.value;
+    return init.total;
+}
+
+} // namespace
+
 // ==========================================
 // CombatState::RollInitiative
 // ==========================================
 
 void CombatState::RollInitiative(EntityManager& em, ComponentRegistry& cr) {
+    std::vector<Entity> participants;
+    auto* initiativeSet = cr.GetSparseSet<Initiative>();
+    if (initiativeSet) {
+        participants.reserve(initiativeSet->Size());
+        for (u32 i = 0; i < initiativeSet->Size(); ++i) {
+            // Generation 0 matches freshly created slots; component lookup is by index.
+            const u32 entityIdx = initiativeSet->GetEntityIndex(i);
+            participants.emplace_back(Entity::EncodeId(entityIdx, 0));
+        }
+    }
+    RollInitiative(em, cr, participants);
+}
+
+void CombatState::RollInitiative(EntityManager& em, ComponentRegistry& cr,
+                                 const std::vector<Entity>& participants) {
     DND_UNUSED(em);
     initiativeOrder.clear();
     currentTurn = 0;
-    isActive = true;
+    isActive = false;
 
-    auto* initiativeSet = cr.GetSparseSet<Initiative>();
-    if (!initiativeSet || initiativeSet->Empty()) {
-        DND_LOG_WARN("CombatState::RollInitiative: No entities with Initiative component found.");
+    std::vector<std::pair<i32, Entity>> pairs;
+    pairs.reserve(participants.size());
+
+    for (Entity entity : participants) {
+        Initiative* init = cr.GetComponent<Initiative>(entity);
+        if (!init) continue;
+        const HitPoints* hp = cr.GetComponent<HitPoints>(entity);
+        if (hp && !hp->IsAlive()) continue;
+        const i32 total = RollOneInitiative(*init);
+        pairs.emplace_back(total, entity);
+    }
+
+    if (pairs.empty()) {
+        DND_LOG_WARN("CombatState::RollInitiative: No living participants with Initiative.");
         return;
     }
 
-    // Build pairs of (rolled initiative, entityIndex) for sorting.
-    // Entity generation is set to 0; the index is sufficient for the sparse set lookups
-    // used throughout combat. Component access via GetComponent uses only the index bits.
-    std::vector<std::pair<i32, u32>> initiativePairs;
-    initiativePairs.reserve(initiativeSet->Size());
-
-    Initiative* components = initiativeSet->begin();
-    for (u32 i = 0; i < initiativeSet->Size(); i++) {
-        Initiative& init = components[i];
-        u32 entityIdx = initiativeSet->GetEntityIndex(i);
-
-        i32 roll;
-        if (init.hasAdvantage) {
-            i32 r1 = DiceRoller::Roll(1, 20);
-            i32 r2 = DiceRoller::Roll(1, 20);
-            roll = (r1 > r2 ? r1 : r2) + init.value;
-        } else {
-            roll = DiceRoller::Roll(1, 20) + init.value;
-        }
-        init.value = roll;
-
-        initiativePairs.emplace_back(roll, entityIdx);
-    }
-
-    // Sort descending by initiative. Ties broken by entity index (lower = earlier).
-    std::sort(initiativePairs.begin(), initiativePairs.end(),
-        [](const std::pair<i32, u32>& a, const std::pair<i32, u32>& b) {
+    // Highest total first. Ties broken by entity index (lower = earlier).
+    std::sort(pairs.begin(), pairs.end(),
+        [](const std::pair<i32, Entity>& a, const std::pair<i32, Entity>& b) {
             if (a.first != b.first) return a.first > b.first;
-            return a.second < b.second;
+            return Entity::GetIndex(a.second.id) < Entity::GetIndex(b.second.id);
         });
 
-    // Build the ordered entity list. Generation is 0; component access only needs the index.
-    for (const auto& pair : initiativePairs) {
-        Entity entity(Entity::EncodeId(pair.second, 0));
-        initiativeOrder.push_back(entity);
+    for (const auto& pair : pairs) {
+        initiativeOrder.push_back(pair.second);
     }
+    isActive = true;
 
     DND_LOG_INFO("Combat started with %zu participants. First turn: entity index %u.",
                  initiativeOrder.size(), initiativeOrder[0].id & Entity::INDEX_MASK);
+}
+
+void CombatState::EndCombat() {
+    initiativeOrder.clear();
+    currentTurn = 0;
+    isActive = false;
 }
 
 // ==========================================
@@ -86,14 +111,18 @@ b8 CombatState::RemoveEntity(Entity entity) {
         if (Entity::GetIndex(initiativeOrder[i].id) == targetIndex) {
             initiativeOrder.erase(initiativeOrder.begin() + i);
 
-            // Adjust current turn if we removed an entity before or at the current index
-            if (i <= currentTurn && currentTurn > 0) {
-                currentTurn--;
-            }
-
-            // If the last entity was removed, end combat
             if (initiativeOrder.empty()) {
                 isActive = false;
+                currentTurn = 0;
+                return true;
+            }
+
+            // Removing someone earlier in the order shifts the current actor left.
+            // Removing the current actor leaves currentTurn on whoever followed them.
+            // Removing the last actor wraps to the top of the round.
+            if (i < currentTurn) {
+                currentTurn--;
+            } else if (currentTurn >= static_cast<i32>(initiativeOrder.size())) {
                 currentTurn = 0;
             }
 

@@ -340,12 +340,15 @@ struct CombatState {
      * entity's index (lower index = higher in a tie).
      *
      * After this call:
-     *   - initiativeOrder is populated and sorted
+     *   - initiativeOrder is populated and sorted (highest total first)
      *   - currentTurn resets to 0
-     *   - isActive is set to true
+     *   - isActive is true when at least one participant was rolled
+     *
+     * Dead combatants (HitPoints present and current HP <= 0) are skipped.
+     * Initiative::value (the modifier) is left unchanged; the d20 + modifier
+     * is stored in Initiative::total.
      *
      * @note This uses the Initiative component's hasAdvantage field.
-     *       The rolled value replaces the component's current value.
      *
      * @param em Entity manager for checking entity validity.
      * @param cr Component registry for accessing Initiative components.
@@ -354,10 +357,32 @@ struct CombatState {
     void RollInitiative(EntityManager& em, ComponentRegistry& cr);
 
     /**
+     * @brief Rolls initiative for an explicit participant list.
+     *
+     * Same rules as RollInitiative(), but only the given entities are
+     * considered. Use this for a corridor duel so bystanders elsewhere
+     * on the floor do not join the turn order. The stored Entity handles
+     * are the ones passed in (generation is preserved).
+     *
+     * @param em Entity manager (unused; kept for signature symmetry).
+     * @param cr Component registry for Initiative and HitPoints.
+     * @param participants Entities to roll, in any order.
+     */
+    void RollInitiative(EntityManager& em, ComponentRegistry& cr,
+                        const std::vector<Entity>& participants);
+
+    /**
+     * @brief Ends combat immediately and clears the turn order.
+     */
+    void EndCombat();
+
+    /**
      * @brief Removes a dead entity from the initiative order.
      *
      * Called when an entity's hit points reach 0. Removes them from
-     * the initiative order and adjusts the current turn index.
+     * the initiative order and keeps currentTurn pointing at whoever
+     * should act next: the same actor if someone earlier in the order
+     * was removed, otherwise the following actor (wrapping to the top).
      *
      * @param entity The entity to remove.
      * @return true if the entity was found and removed.
