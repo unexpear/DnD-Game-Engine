@@ -9,6 +9,10 @@
  *   1. RollInitiative() populates the turn order and activates combat.
  *   2. Attacks apply damage to the target's HitPoints (and never go negative).
  *   3. A target reduced to 0 HP is removed from the initiative order.
+ *   4. Initiative::value stays the modifier across repeated rolls, and the
+ *      d20 total lands in Initiative::total.
+ *   5. RollInitiative(participants) ignores bystanders.
+ *   6. RemoveEntity keeps currentTurn on the actor who should go next.
  *
  * This is intentionally a self-contained smoke test (no test framework) so it
  * can be built with a single g++ invocation and run anywhere — including
@@ -31,6 +35,7 @@
 #include "ecs/entity.h"
 #include "ecs/component.h"
 #include "ecs/system.h"
+#include "ecs/systems/script_system.h"
 #include "game/dice.h"
 #include "game/combat.h"
 #include "game/combat_stats.h"
@@ -38,6 +43,13 @@
 
 #include <cstdio>
 #include <memory>
+#include <vector>
+
+namespace Dnd {
+// script_system.cpp is Win32-only (windows.h). CombatSystem notifies it on
+// damage; this headless stub keeps the documented g++ line linkable.
+void ScriptSystem::NotifyEvent(ComponentRegistry&, Entity, const std::string&) {}
+}
 
 using namespace Dnd;
 
@@ -94,9 +106,19 @@ int main() {
     }
 
     std::printf("\n-- 1. Initiative --\n");
+    Initiative* heroInit = cr.GetComponent<Initiative>(hero);
+    const i32 heroMod = heroInit->value;
     combat->GetState().RollInitiative(em, cr);
     Check(combat->GetState().isActive, "combat is active after RollInitiative()");
     Check(combat->GetState().initiativeOrder.size() == 3, "all 3 combatants in initiative order");
+    Check(heroInit->value == heroMod, "initiative modifier is preserved");
+    Check(heroInit->total >= heroMod + 1 && heroInit->total <= heroMod + 20,
+          "initiative total is one d20 plus the modifier");
+    combat->GetState().RollInitiative(em, cr);
+    Check(heroInit->value == heroMod, "a second roll still uses the original modifier");
+    Check(heroInit->total >= heroMod + 1 && heroInit->total <= heroMod + 20,
+          "a second roll does not add the previous total");
+    Check(combat->GetState().initiativeOrder.size() == 3, "second roll still seats all 3");
 
     std::printf("\n-- 2. Damage application --\n");
     HitPoints* tankHP = cr.GetComponent<HitPoints>(tank);
@@ -135,6 +157,49 @@ int main() {
     Check(goblinHP->current == 0, "overkilled target is at 0 HP");
     Check(!InInitiative(combat->GetState(), goblin), "dead target removed from initiative");
     Check(combat->GetState().initiativeOrder.size() == 2, "initiative order shrank to 2");
+
+    std::printf("\n-- 4. Removing the current actor does not rewind the turn --\n");
+    {
+        CombatState& st = combat->GetState();
+        st.isActive = true;
+        st.initiativeOrder = { hero, tank, goblin };
+        st.currentTurn = 1; // tank is acting
+        Check(st.RemoveEntity(tank), "current actor removed");
+        Check(st.GetCurrentEntity() == goblin, "turn passes to whoever followed the removed actor");
+        Check(st.initiativeOrder.size() == 2, "order is hero, goblin");
+
+        st.initiativeOrder = { hero, tank, goblin };
+        st.currentTurn = 1; // tank
+        Check(st.RemoveEntity(hero), "actor earlier in the order removed");
+        Check(st.GetCurrentEntity() == tank, "current actor stays put when someone earlier falls");
+
+        st.initiativeOrder = { hero, tank, goblin };
+        st.currentTurn = 2; // goblin, last
+        Check(st.RemoveEntity(goblin), "last actor removed");
+        Check(st.GetCurrentEntity() == hero, "removing the last actor wraps to the top of the round");
+        Check(st.isActive, "combat stays active while someone remains");
+    }
+
+    std::printf("\n-- 5. Explicit participants exclude bystanders and the dead --\n");
+    {
+        Entity bystander = makeCombatant(10, 12, 4);
+        std::vector<Entity> duel;
+        duel.push_back(hero);
+        duel.push_back(tank);
+        duel.push_back(goblin); // dead: must not rejoin
+        combat->GetState().RollInitiative(em, cr, duel);
+        Check(combat->GetState().isActive, "duel roll activates combat");
+        Check(combat->GetState().initiativeOrder.size() == 2, "dead combatant is left out of the duel");
+        Check(InInitiative(combat->GetState(), hero), "hero is in the duel");
+        Check(InInitiative(combat->GetState(), tank), "tank is in the duel");
+        Check(!InInitiative(combat->GetState(), goblin), "dead goblin stays out");
+        Check(!InInitiative(combat->GetState(), bystander), "bystander with Initiative is not pulled in");
+        Initiative* bInit = cr.GetComponent<Initiative>(bystander);
+        Check(bInit->total == 0, "bystander was not rolled");
+        combat->GetState().EndCombat();
+        Check(!combat->GetState().isActive, "EndCombat clears the encounter");
+        Check(combat->GetState().initiativeOrder.empty(), "EndCombat drops the turn order");
+    }
 
     std::printf("\n==== %s (%d failure%s) ====\n",
                 g_failures == 0 ? "ALL CHECKS PASSED" : "CHECKS FAILED",

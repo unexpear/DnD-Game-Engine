@@ -237,27 +237,29 @@ struct ArmorClass {
  * @brief ECS component tracking a character's initiative for turn order.
  *
  * Initiative determines the order in which combatants act during
- * an encounter. The initiative value is typically a d20 roll + DEX
- * modifier. Advantage on initiative checks means rolling twice and
- * taking the higher result.
+ * an encounter. `value` is the modifier (typically Dexterity) added to a d20.
+ * Rolling initiative writes the total into `total` and leaves `value` alone,
+ * so a later encounter can roll again without inflating the modifier.
+ * Advantage on initiative checks means rolling twice and taking the higher die.
  */
 struct Initiative {
-    i32 value;        ///< The initiative result. Higher = acts sooner.
+    i32 value;        ///< Modifier added to the d20. Not replaced by the roll.
+    i32 total;        ///< Last rolled total (d20 + value). 0 until rolled.
     b8 hasAdvantage;  ///< Whether this character has advantage on initiative rolls.
 
     /**
-     * @brief Default constructor. Creates 0 initiative, no advantage.
+     * @brief Default constructor. Creates a +0 modifier, no roll yet, no advantage.
      */
     Initiative()
-        : value(0), hasAdvantage(false) {}
+        : value(0), total(0), hasAdvantage(false) {}
 
     /**
      * @brief Parameterized constructor.
-     * @param value The initiative result value.
+     * @param value The initiative modifier (typically Dexterity).
      * @param hasAdvantage Whether the character has advantage (default false).
      */
     explicit Initiative(i32 value, b8 hasAdvantage = false)
-        : value(value), hasAdvantage(hasAdvantage) {}
+        : value(value), total(0), hasAdvantage(hasAdvantage) {}
 };
 
 // ==========================================

@@ -65,6 +65,23 @@ struct TrapData {
     // Crumbling-floor specific: how long Finn has stood on it.
     f32 standTimer;
     f32 standThreshold;     ///< Seconds before the floor gives way (default 1.5).
+
+    /// @brief Zero every field. Placement code only fills what it uses;
+    ///        a garbage `triggered` or `cooldownTimer` used to swallow the trap.
+    TrapData()
+        : cell{-1, -1}
+        , type(TrapType::SPIKE)
+        , active(false)
+        , triggered(false)
+        , damage(0.0f)
+        , cooldownTimer(0.0f)
+        , cooldownMax(0.0f)
+        , linkedTrap(-1)
+        , destCell{-1, -1}
+        , leverWallCell{-1, -1}
+        , leverState(false)
+        , standTimer(0.0f)
+        , standThreshold(1.5f) {}
 };
 
 /**
@@ -253,7 +270,30 @@ private:
     b8 Walkable(i32 x, i32 y) const;
     Entity LivingEnemyAt(const Cell& c) const; ///< A living goblin on cell c, else None().
     b8 RepathToExit();                    ///< (Re)compute + start the A* path to the chest.
-    void ResolveMazeAttack();             ///< Apply Finn's strike + the goblin's reprisal.
+    void ResolveMazeAttack();             ///< Apply Finn's strike (the foe acts on their own turn).
+
+    // ---- Corridor encounter: explore pauses, turns resolve, then explore resumes ----
+    enum class DemoOutcome { ONGOING, VICTORY, DEFEAT };
+    DemoOutcome m_outcome = DemoOutcome::ONGOING;
+    b8 m_inEncounter = false;             ///< Turn order is live.
+    Entity m_encounterFoe = Entity::None();
+    b8 m_ambush = false;                  ///< Foe hadn't noticed Finn when the fight started.
+    b8 m_awaitingPlayer = false;          ///< Finn's turn: waiting for attack / disengage / drink.
+    b8 m_strikeIsEnemy = false;           ///< The in-progress lunge is the foe's attack.
+    f32 m_turnDelay = 0.0f;               ///< Seconds before an enemy turn auto-resolves.
+
+    const char* ActorName(Entity e) const;
+    b8 IsFinalFloor() const { return m_currentFloor >= kMaxFloors - 1; }
+    void BeginEncounter(Entity foe);
+    void AnnounceTurn();
+    void EndEncounter(b8 resumeTravel);
+    void FinishCombatAction();
+    void StartEnemyStrike();
+    void ResolveEnemyStrike();
+    void CancelMotion();
+    void OnVictory();
+    void OnDefeat(const char* how);
+    void HandleExitArrival();
 
     // ---- Loot on the maze floor: hidden until a Perception (WIS) check reveals it ----
     std::vector<Entity> m_items;          ///< Loot entities (small glint spheres).
