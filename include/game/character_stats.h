@@ -8,7 +8,9 @@
  * skill list, and proficiency tracking.
  *
  * Modifier calculation follows D&D 5e rules:
- *   modifier = (score - 10) / 2 (integer division, rounding down)
+ *   modifier = floor((score - 10) / 2)
+ *   Odd scores below 10 are negative (9 -> -1, 7 -> -2). C++ toward-zero
+ *   division does not match that table, so GetModifier floors explicitly.
  *
  * @note Ability scores typically range from 3-20 for player characters,
  *       but the system supports any non-negative value for monsters.
@@ -24,6 +26,53 @@
 #include <unordered_map>
 
 namespace Dnd {
+
+// ==========================================
+// ENUM: Ability
+// ==========================================
+
+/**
+ * @enum Ability
+ * @brief The six ability scores, in the order used by saving-throw arrays.
+ */
+enum class Ability : u32 {
+    STRENGTH     = 0,
+    DEXTERITY    = 1,
+    CONSTITUTION = 2,
+    INTELLIGENCE = 3,
+    WISDOM       = 4,
+    CHARISMA     = 5
+};
+
+// ==========================================
+// ENUM: ProficiencyRank
+// ==========================================
+
+/**
+ * @enum ProficiencyRank
+ * @brief How a d20 check adds the proficiency bonus.
+ *
+ * EXPERTISE adds the bonus twice (rogue Expertise, bard Expertise).
+ * Jack of All Trades (half proficiency) is not represented.
+ */
+enum class ProficiencyRank : u32 {
+    NONE       = 0,
+    PROFICIENT = 1,
+    EXPERTISE  = 2
+};
+
+/**
+ * @brief Ability modifier plus zero, one, or two copies of the proficiency bonus.
+ */
+inline i32 CheckBonus(i32 abilityModifier, i32 proficiencyBonus, ProficiencyRank rank) {
+    i32 bonus = abilityModifier;
+    if (rank == ProficiencyRank::EXPERTISE) {
+        bonus += proficiencyBonus * 2;
+    } else if (rank == ProficiencyRank::PROFICIENT) {
+        bonus += proficiencyBonus;
+    }
+    return bonus;
+}
 
 // ==========================================
 // STRUCT: AbilityScores
@@ -73,15 +122,19 @@ struct AbilityScores {
     /**
      * @brief Computes the ability modifier for a given score.
      *
-     * Standard D&D 5e formula: modifier = (score - 10) / 2.
-     * Integer division truncates toward zero, which produces the correct
-     * D&D behavior (e.g., score 8 -> -1, score 9 -> -1, score 10 -> 0).
+     * Standard D&D 5e formula: floor((score - 10) / 2).
+     * Score 9 is -1, score 8 is -1, score 10 is 0, score 11 is 0.
      *
      * @param score The ability score to compute the modifier for.
      * @return The ability modifier (typically in range [-5, +10]).
      */
     static i32 GetModifier(i32 score) {
-        return (score - 10) / 2;
+        const i32 delta = score - 10;
+        if (delta >= 0) {
+            return delta / 2;
+        }
+        // Floor division: -1 -> -1, -3 -> -2. Toward-zero division is wrong here.
+        return -(((-delta) + 1) / 2);
     }
 
     /**
@@ -120,6 +173,28 @@ struct AbilityScores {
         return mods;
     }
 };
+
+/**
+ * @brief Returns one ability score from the block.
+ */
+inline i32 GetAbilityScore(const AbilityScores& scores, Ability ability) {
+    switch (ability) {
+        case Ability::STRENGTH:     return scores.strength;
+        case Ability::DEXTERITY:    return scores.dexterity;
+        case Ability::CONSTITUTION: return scores.constitution;
+        case Ability::INTELLIGENCE: return scores.intelligence;
+        case Ability::WISDOM:       return scores.wisdom;
+        case Ability::CHARISMA:     return scores.charisma;
+    }
+    return scores.strength;
+}
+
+/**
+ * @brief Ability modifier for one score on a block.
+ */
+inline i32 GetAbilityModifier(const AbilityScores& scores, Ability ability) {
+    return AbilityScores::GetModifier(GetAbilityScore(scores, ability));
+}
 
 // ==========================================
 // ENUM: Skill
@@ -179,7 +254,8 @@ enum class Skill : u32 {
  * @brief Tracks which skills a character is proficient in and computes skill bonuses.
  *
  * Skill bonus calculation (D&D 5e):
- *   skillBonus = abilityModifier + (proficiency ? proficiencyBonus : 0)
+ *   skillBonus = abilityModifier + rank * proficiencyBonus
+ *   where rank is 0 (untrained), 1 (proficient), or 2 (expertise).
  *
  * This struct stores only the proficiency flags. The actual proficiency
  * bonus value (which scales with character level) is expected to be
@@ -199,6 +275,7 @@ struct SkillProficiencies {
      * Use HasProficiency() to safely check without default-inserting.
      */
     std::unordered_map<Skill, b8> proficiencies;
+    std::unordered_map<Skill, b8> expertise; ///< Skills that add the proficiency bonus twice.
 
     /**
      * @brief Checks if the character is proficient in a given skill.
@@ -208,6 +285,15 @@ struct SkillProficiencies {
     b8 HasProficiency(Skill skill) const {
         auto it = proficiencies.find(skill);
         return it != proficiencies.end() && it->second;
+    }
+
+    /**
+     * @brief True when the skill adds the proficiency bonus twice.
+     * Expertise implies proficiency.
+     */
+    b8 HasExpertise(Skill skill) const {
+        auto it = expertise.find(skill);
+        return it != expertise.end() && it->second;
     }
 
     /**
@@ -256,12 +342,13 @@ struct SkillProficiencies {
                 break;
         }
 
-        // Add proficiency bonus if proficient
-        if (HasProficiency(skill)) {
-            abilityModifier += proficiencyBonus;
+        ProficiencyRank rank = ProficiencyRank::NONE;
+        if (HasExpertise(skill)) {
+            rank = ProficiencyRank::EXPERTISE;
+        } else if (HasProficiency(skill)) {
+            rank = ProficiencyRank::PROFICIENT;
         }
-
-        return abilityModifier;
+        return CheckBonus(abilityModifier, proficiencyBonus, rank);
     }
 
     /**
@@ -270,6 +357,14 @@ struct SkillProficiencies {
      */
     void AddProficiency(Skill skill) {
         proficiencies[skill] = true;
+    }
+
+    /**
+     * @brief Grants expertise. Also grants ordinary proficiency.
+     */
+    void AddExpertise(Skill skill) {
+        proficiencies[skill] = true;
+        expertise[skill] = true;
     }
 
     /**
@@ -292,6 +387,55 @@ struct SkillProficiencies {
         }
         return count;
     }
+};
+
+// ==========================================
+// STRUCT: SavingThrowProficiencies
+// ==========================================
+
+/**
+ * @struct SavingThrowProficiencies
+ * @brief Which of the six saving throws add the proficiency bonus.
+ *
+ * Class tables grant exactly two. Monsters leave this empty unless a
+ * stat block lists a save.
+ */
+struct SavingThrowProficiencies {
+    b8 proficient[6];
+
+    SavingThrowProficiencies() {
+        for (i32 i = 0; i < 6; ++i) {
+            proficient[i] = false;
+        }
+    }
+
+    void SetProficient(Ability ability, b8 value) {
+        proficient[static_cast<u32>(ability)] = value;
+    }
+
+    b8 IsProficient(Ability ability) const {
+        return proficient[static_cast<u32>(ability)];
+    }
+
+    i32 GetBonus(Ability ability, const AbilityScores& scores, i32 proficiencyBonus) const {
+        const ProficiencyRank rank = IsProficient(ability)
+            ? ProficiencyRank::PROFICIENT
+            : ProficiencyRank::NONE;
+        return CheckBonus(GetAbilityModifier(scores, ability), proficiencyBonus, rank);
+    }
+};
+
+/**
+ * @struct ToolProficiencies
+ * @brief Tool proficiencies the rules layer currently understands.
+ *
+ * Only thieves' tools are tracked. Other tools are still unrepresented.
+ */
+struct ToolProficiencies {
+    ProficiencyRank thievesTools;
+
+    ToolProficiencies()
+        : thievesTools(ProficiencyRank::NONE) {}
 };
 
 } // namespace Dnd

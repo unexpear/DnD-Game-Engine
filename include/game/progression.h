@@ -289,6 +289,8 @@ struct CharacterInfo {
     ClassType classType;             ///< The character's class (determines hit die, features).
     AbilityScores abilities;         ///< The six ability scores (after racial adjustments).
     SkillProficiencies skills;       ///< Tracks which skills the character is proficient in.
+    SavingThrowProficiencies saves;  ///< Class (or monster) saving throw proficiencies.
+    ToolProficiencies tools;         ///< Tool proficiencies. Thieves' tools is the one that is real.
     i32 level;                       ///< Current character level (1-20).
     b8 isNPC;                        ///< Whether this is a non-player character.
     b8 isHostile;                    ///< Whether this character is hostile to the player party.

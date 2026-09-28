@@ -97,17 +97,22 @@ struct DamageRoll {
     /**
      * @brief Rolls the damage dice and returns the total.
      *
-     * Rolls the DiceRoll expression once, then rolls again if isCritical
-     * is true and adds both totals. The modifier is NOT doubled per D&D 5e rules.
+     * Rolls the weapon dice once. On a critical hit the dice are rolled
+     * again and added; the flat modifier is applied once. Damage is never
+     * negative (a penalty can reduce a hit to 0).
      *
-     * @return Total damage. Returns 0 if dice is invalid.
+     * @return Total damage, minimum 0.
      */
     i32 RollDamage() const {
-        i32 total = dice.Roll();
-        if (isCritical) {
-            total += dice.Roll();
+        i32 diceTotal = 0;
+        if (dice.numDice > 0 && dice.numSides > 0) {
+            diceTotal = DiceRoller::Roll(dice.numDice, dice.numSides, 0);
+            if (isCritical) {
+                diceTotal += DiceRoller::Roll(dice.numDice, dice.numSides, 0);
+            }
         }
-        return total;
+        const i32 total = diceTotal + dice.modifier;
+        return total < 0 ? 0 : total;
     }
 };
 

@@ -135,6 +135,16 @@ public:
     static void Initialize();
 
     /**
+     * @brief Seeds the PRNG and marks it initialized.
+     *
+     * Unlike Initialize(), this always replaces the current sequence.
+     * Tests use it to lock dice-dependent rules to a known stream.
+     *
+     * @param seed The mt19937 seed.
+     */
+    static void Seed(u32 seed);
+
+    /**
      * @brief Rolls dice and returns the total.
      *
      * Rolls `numDice` dice, each with `numSides` faces, sums them, and

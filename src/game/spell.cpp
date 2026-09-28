@@ -11,6 +11,7 @@
 
 #include "game/spell.h"
 #include "game/combat_stats.h"
+#include "game/rules.h"
 #include "core/log.h"
 
 namespace Dnd {
@@ -81,31 +82,38 @@ b8 SpellcastingSystem::ProcessCast(const SpellCastRequest& request, EntityManage
         DND_LOG_DEBUG("[Spellcast] Material component: consumed/present.");
     }
 
-    // Apply effects: handle damaging spells
+    // Spell attack bonus and save DC come from the caster's class, when known.
+    const CharacterInfo* casterInfo = cr.GetComponent<CharacterInfo>(request.caster);
+    const i32 spellMod = casterInfo ? SpellcastingAbilityModifier(*casterInfo) : 0;
+    const i32 proficiency = casterInfo ? casterInfo->proficiencyBonus : 0;
+
+    // Apply effects: handle damaging spells.
+    // Roll order for an attack spell: one d20, then damage dice (crit dice if the d20 is 20).
+    // Roll order for a save spell: one d20, then damage dice. A successful save deals
+    // half (round down) when the spell says so, otherwise none.
     if (spell.requiresAttackRoll) {
         Entity target = request.target;
         u32 targetIdx = Entity::GetIndex(target.id);
 
-        // Get target's AC
         i32 targetAC = 10;
         auto* targetACComp = cr.GetComponent<ArmorClass>(target);
         if (targetACComp) {
             targetAC = targetACComp->GetTotal();
         }
 
-        // Build a temporary attack roll (attack bonus from caster's stats would come from
-        // a separate component; here we use the spell's implicit bonus or a default of 0).
-        // In a full implementation, the caster's proficiency + spellcasting ability modifier
-        // would be pulled from an AbilityScores component.
-        AttackRoll spellAttack(0, false, false);
-        if (spellAttack.IsHit(targetAC)) {
-            i32 damage = spell.damage.RollDamage();
+        const i32 attackBonus = SpellAttackBonus(spellMod, proficiency);
+        const D20Check attack = RollD20Check(RollMode::NORMAL, attackBonus);
+        if (AttackHits(attack, targetAC)) {
+            DamageRoll rolled = spell.damage;
+            rolled.isCritical = IsCriticalHit(attack);
+            const i32 damage = rolled.RollDamage();
 
             auto* targetHP = cr.GetComponent<HitPoints>(target);
             if (targetHP) {
                 targetHP->TakeDamage(damage);
-                DND_LOG_INFO("[Spellcast] '%s' hits entity index %u for %d damage (HP: %d/%d).",
-                             spell.name, targetIdx, damage, targetHP->current, targetHP->maximum);
+                DND_LOG_INFO("[Spellcast] '%s' hits entity index %u for %d damage (d20 %d %+d vs AC %d, HP: %d/%d).",
+                             spell.name, targetIdx, damage, attack.natural, attack.modifier,
+                             targetAC, targetHP->current, targetHP->maximum);
 
                 if (!targetHP->IsAlive()) {
                     DND_LOG_INFO("[Spellcast] Entity index %u slain by '%s'!",
@@ -113,26 +121,38 @@ b8 SpellcastingSystem::ProcessCast(const SpellCastRequest& request, EntityManage
                 }
             }
         } else {
-            DND_LOG_INFO("[Spellcast] '%s' missed entity index %u (AC %d).",
-                         spell.name, targetIdx, targetAC);
+            DND_LOG_INFO("[Spellcast] '%s' missed entity index %u (d20 %d %+d vs AC %d).",
+                         spell.name, targetIdx, attack.natural, attack.modifier, targetAC);
         }
     } else if (spell.requiresSavingThrow) {
-        // Saving throw spells apply half or no damage based on the target's save.
-        // For this implementation, we assume the target fails and apply full damage.
         Entity target = request.target;
         u32 targetIdx = Entity::GetIndex(target.id);
+        const i32 saveDC = SpellSaveDC(spellMod, proficiency);
 
-        if (spell.damage.dice.numDice > 0) {
-            i32 damage = spell.damage.RollDamage();
-
-            auto* targetHP = cr.GetComponent<HitPoints>(target);
-            if (targetHP) {
-                targetHP->TakeDamage(damage);
-                DND_LOG_INFO("[Spellcast] '%s' deals %d damage to entity index %u (save failed).",
-                             spell.name, damage, targetIdx);
-            }
+        i32 saveBonus = 0;
+        const CharacterInfo* targetInfo = cr.GetComponent<CharacterInfo>(target);
+        if (targetInfo) {
+            saveBonus = targetInfo->saves.GetBonus(spell.saveAbility, targetInfo->abilities,
+                                                   targetInfo->proficiencyBonus);
         }
-    } else if (spell.damage.dice.numDice > 0) {
+        const D20Check save = RollD20Check(RollMode::NORMAL, saveBonus);
+        const b8 saved = CheckSucceeds(save, saveDC);
+
+        i32 damage = 0;
+        if (spell.damage.dice.numDice > 0 || spell.damage.dice.modifier != 0) {
+            damage = spell.damage.RollDamage();
+            damage = DamageAfterSave(damage, saved, spell.halfOnSave);
+        }
+
+        auto* targetHP = cr.GetComponent<HitPoints>(target);
+        if (targetHP && damage > 0) {
+            targetHP->TakeDamage(damage);
+        }
+        DND_LOG_INFO("[Spellcast] '%s' save d20 %d %+d = %d vs DC %d (%s), damage %d.",
+                     spell.name, save.natural, save.modifier, save.total, saveDC,
+                     saved ? "success" : "failure", damage);
+        DND_UNUSED(targetIdx);
+    } else if (spell.damage.dice.numDice > 0 || spell.damage.dice.modifier != 0) {
         // Auto-hit damaging spells (magic missile, etc.)
         Entity target = request.target;
         u32 targetIdx = Entity::GetIndex(target.id);
