@@ -1,0 +1,58 @@
+{
+  "format": "dndcampaign",
+  "formatVersion": 1,
+  "id": "rank-wars",
+  "title": "Rank Wars",
+  "genreTags": [
+    "duel",
+    "rank",
+    "world-trigger"
+  ],
+  "ruleset": "tabletop-generic",
+  "assetsRoot": ".",
+  "entryScene": "campaign_table",
+  "entryScript": "",
+  "summary": "Rank battle: two sides and a badge on the table.",
+  "sourceNote": "World Trigger rank battles, staged as a campaign encounter.",
+  "tableTokens": [
+    {
+      "name": "Attacker",
+      "color": [
+        0.85,
+        0.35,
+        0.28
+      ],
+      "position": [
+        -1.8,
+        0.45,
+        0.2
+      ]
+    },
+    {
+      "name": "Defender",
+      "color": [
+        0.28,
+        0.45,
+        0.82
+      ],
+      "position": [
+        1.8,
+        0.45,
+        0.2
+      ]
+    },
+    {
+      "name": "Rank",
+      "color": [
+        0.9,
+        0.78,
+        0.3
+      ],
+      "position": [
+        0.0,
+        0.45,
+        -0.8
+      ]
+    }
+  ]
+}

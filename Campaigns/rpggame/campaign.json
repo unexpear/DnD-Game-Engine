@@ -1,0 +1,58 @@
+{
+  "format": "dndcampaign",
+  "formatVersion": 1,
+  "id": "rpggame",
+  "title": "rpggame",
+  "genreTags": [
+    "extraction",
+    "raid",
+    "tabletop-framing"
+  ],
+  "ruleset": "tabletop-generic",
+  "assetsRoot": ".",
+  "entryScene": "campaign_table",
+  "entryScript": "",
+  "summary": "Extraction raid framed as tokens. Not a Bevy port.",
+  "sourceNote": "D:\\dev\\rpggame \u2014 first-person extraction RPG built in Bevy.",
+  "tableTokens": [
+    {
+      "name": "Operative",
+      "color": [
+        0.75,
+        0.78,
+        0.82
+      ],
+      "position": [
+        -1.5,
+        0.45,
+        0.4
+      ]
+    },
+    {
+      "name": "Extract",
+      "color": [
+        0.25,
+        0.72,
+        0.45
+      ],
+      "position": [
+        1.6,
+        0.45,
+        -0.6
+      ]
+    },
+    {
+      "name": "Hazard",
+      "color": [
+        0.72,
+        0.28,
+        0.22
+      ],
+      "position": [
+        0.2,
+        0.45,
+        1.2
+      ]
+    }
+  ]
+}

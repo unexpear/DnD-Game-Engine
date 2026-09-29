@@ -1,0 +1,21 @@
+# Rank Wars
+
+Pack id: `rank-wars`
+
+## Source
+
+World Trigger rank battles, staged as a campaign encounter.
+
+## Tabletop mapping
+
+One side of the table is the attacker's tokens, the other is the defender's. The rank badge marks the match. A round is the existing combat beat. Trigger loadouts can later be items; the anime sim is not reimplemented.
+
+## What loads today
+
+Attacker, defender, and rank tokens load as placeholders.
+
+Ruleset module: `tabletop-generic`. Entry scene: `campaign_table`. `entryScript` is empty and is not executed. `assetsRoot` is this folder. The loader does not add it to the engine asset search path.
+
+## Isolation
+
+This directory is the only content root for the pack. It cannot replace engine defaults, the D&D demo, or another pack. Switching away drops this session's manifest and ruleset binding. See [docs/CAMPAIGNS.md](../../docs/CAMPAIGNS.md).

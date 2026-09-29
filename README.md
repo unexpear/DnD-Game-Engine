@@ -110,3 +110,7 @@ This project aims to create a fully custom D&D game engine that supports:
 - User interface improvements
 - Documentation and tutorials
 - Testing and bug fixes
+
+## Campaign packs
+
+The current D&D demo is the default campaign. Other games run as isolated packs on the same table (`F8`, or `--campaign=<id>`). Pack format, isolation rules, and how to add a game are in [docs/CAMPAIGNS.md](docs/CAMPAIGNS.md).

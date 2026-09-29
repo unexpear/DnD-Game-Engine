@@ -66,6 +66,14 @@ b8 UISystem::Initialize() {
     return true;
 }
 
+void UISystem::ClearWidgets() {
+    for (auto* widget : m_widgets) {
+        delete widget;
+    }
+    m_widgets.clear();
+    m_mouseCaptured = false;
+}
+
 void UISystem::Shutdown() {
     if (!m_initialized) return;
 

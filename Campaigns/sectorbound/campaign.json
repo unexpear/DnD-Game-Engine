@@ -1,0 +1,58 @@
+{
+  "format": "dndcampaign",
+  "formatVersion": 1,
+  "id": "sectorbound",
+  "title": "Sectorbound",
+  "genreTags": [
+    "voxel",
+    "sandbox",
+    "sector"
+  ],
+  "ruleset": "tabletop-generic",
+  "assetsRoot": ".",
+  "entryScene": "campaign_table",
+  "entryScript": "",
+  "summary": "A claimed sector on the table, not a voxel engine.",
+  "sourceNote": "Voxel sandbox RPG. Themes come across as a campaign; the voxel sim does not.",
+  "tableTokens": [
+    {
+      "name": "Sector",
+      "color": [
+        0.35,
+        0.62,
+        0.55
+      ],
+      "position": [
+        0.0,
+        0.45,
+        0.0
+      ]
+    },
+    {
+      "name": "Claim",
+      "color": [
+        0.82,
+        0.72,
+        0.28
+      ],
+      "position": [
+        -1.8,
+        0.45,
+        0.6
+      ]
+    },
+    {
+      "name": "Encounter",
+      "color": [
+        0.7,
+        0.32,
+        0.28
+      ],
+      "position": [
+        1.8,
+        0.45,
+        -0.4
+      ]
+    }
+  ]
+}

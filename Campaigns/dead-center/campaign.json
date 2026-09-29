@@ -1,0 +1,58 @@
+{
+  "format": "dndcampaign",
+  "formatVersion": 1,
+  "id": "dead-center",
+  "title": "Dead Center",
+  "genreTags": [
+    "holdout",
+    "last-stand",
+    "stub"
+  ],
+  "ruleset": "tabletop-generic",
+  "assetsRoot": ".",
+  "entryScene": "campaign_table",
+  "entryScript": "",
+  "summary": "A holdout on the center of the table.",
+  "sourceNote": "Included from the platform brief so this title is not left out. This repository has no sibling survey to import, so the folder is a stub that still loads.",
+  "tableTokens": [
+    {
+      "name": "Center",
+      "color": [
+        0.55,
+        0.55,
+        0.58
+      ],
+      "position": [
+        0.0,
+        0.45,
+        0.0
+      ]
+    },
+    {
+      "name": "Holder",
+      "color": [
+        0.3,
+        0.45,
+        0.7
+      ],
+      "position": [
+        -1.6,
+        0.45,
+        0.4
+      ]
+    },
+    {
+      "name": "Pressure",
+      "color": [
+        0.7,
+        0.28,
+        0.25
+      ],
+      "position": [
+        1.6,
+        0.45,
+        0.4
+      ]
+    }
+  ]
+}

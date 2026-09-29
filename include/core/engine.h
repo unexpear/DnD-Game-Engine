@@ -70,6 +70,12 @@ struct EngineConfig {
     b8  vsyncEnabled;
     /** @brief Whether to start in fullscreen. Default: false. */
     b8  fullscreenEnabled;
+    /**
+     * @brief Campaign pack to load instead of the D&D demo.
+     * nullptr or empty selects the canonical "dnd" pack.
+     * The pointer must outlive Engine::Initialize (argv storage is fine).
+     */
+    const char* campaignId;
 
     /** @brief Default constructor with sensible defaults for development. */
     EngineConfig();
@@ -145,6 +151,14 @@ public:
      * @param focus World-space point to center the orbit on.
      */
     static void SetCameraFocus(const Vec3& focus);
+
+    /**
+     * @brief Restores the orbit camera to the base demo framing.
+     *
+     * Called when a campaign pack is activated so the previous pack's
+     * focus, zoom, and angles do not carry over.
+     */
+    static void ResetViewToBase();
 
 private:
     /** @brief Private constructor. */

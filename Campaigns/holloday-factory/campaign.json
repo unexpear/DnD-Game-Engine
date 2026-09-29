@@ -1,0 +1,58 @@
+{
+  "format": "dndcampaign",
+  "formatVersion": 1,
+  "id": "holloday-factory",
+  "title": "Holloday Factory",
+  "genreTags": [
+    "factory",
+    "shift",
+    "stub"
+  ],
+  "ruleset": "tabletop-generic",
+  "assetsRoot": ".",
+  "entryScene": "campaign_table",
+  "entryScript": "",
+  "summary": "A factory shift, token by token. Stub pack.",
+  "sourceNote": "Included from the platform brief so this title is not left out. This repository has no sibling survey to import, so the folder is a stub that still loads.",
+  "tableTokens": [
+    {
+      "name": "Station",
+      "color": [
+        0.7,
+        0.32,
+        0.32
+      ],
+      "position": [
+        -1.4,
+        0.45,
+        0.3
+      ]
+    },
+    {
+      "name": "Line",
+      "color": [
+        0.85,
+        0.7,
+        0.4
+      ],
+      "position": [
+        0.2,
+        0.45,
+        0.8
+      ]
+    },
+    {
+      "name": "Quota",
+      "color": [
+        0.45,
+        0.55,
+        0.4
+      ],
+      "position": [
+        1.6,
+        0.45,
+        -0.3
+      ]
+    }
+  ]
+}

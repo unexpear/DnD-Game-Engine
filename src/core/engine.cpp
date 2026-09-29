@@ -33,6 +33,7 @@
 #include "scene/dnd_demo_scene.h"
 #include "scene/shadow_test_scene.h"
 #include "scene/scene_serializer.h"
+#include "campaign/campaign_host.h"
 #include "ui/ui_system.h"
 #include "ui/ui_widget.h"
 #include "ui/ui_renderer.h"
@@ -108,6 +109,7 @@ EngineConfig::EngineConfig()
     , windowHeight(720)
     , vsyncEnabled(true)
     , fullscreenEnabled(false)
+    , campaignId(nullptr)
 {
 }
 
@@ -184,12 +186,14 @@ b8 Engine::Initialize(const EngineConfig& config) {
     // ECS SCENE SETUP
     // ==========================================
 
-    // Create the scene manager
+    // Create the scene manager. CampaignHost loads the D&D demo pack unless
+    // --campaign= names another registered pack. A failed host still leaves
+    // the demo scene in place.
     s_sceneManager = new SceneManager();
-
-    // Create and load the D&D demo scene
-    DndDemoScene* demoScene = new DndDemoScene();
-    s_sceneManager->SetActiveScene(std::unique_ptr<DndDemoScene>(demoScene));
+    if (!CampaignHost::Initialize(s_sceneManager, s_config.campaignId)) {
+        DND_LOG_ERROR("Campaign host failed; loading the D&D demo scene");
+        s_sceneManager->SetActiveScene(std::make_unique<DndDemoScene>());
+    }
 
     // ==========================================
     // EDITOR SETUP
@@ -599,6 +603,10 @@ void Engine::Run() {
             UIRenderer::EndFrame();
         }
 
+        CampaignHost::RenderChrome(uiOrtho,
+                                   static_cast<f32>(s_config.windowWidth),
+                                   static_cast<f32>(s_config.windowHeight));
+
         Profiler::Get().EndSystem(); // Editor
 
         // Step 11: Profiler overlay (if visible)
@@ -628,6 +636,13 @@ void Engine::Run() {
 // ==========================================
 
 void Engine::HandleInput() {
+    // F8 opens the campaign picker. While it is open, game keys (including
+    // Escape-to-quit) belong to the picker so a pack switch cannot be missed
+    // and cannot quit the process by accident.
+    if (CampaignHost::HandleInput()) {
+        return;
+    }
+
     // Escape during a drag operation: cancel
     if (Input::IsKeyPressed(KeyCode::ESCAPE) && DragDropManager::Get().IsDragging()) {
         DragDropManager::Get().CancelDrag();
@@ -949,6 +964,7 @@ void Engine::Shutdown() {
 
     // ECS Scene Manager
     DND_LOG_INFO("Shutting down Scene Manager...");
+    CampaignHost::Shutdown();
     if (s_sceneManager) { delete s_sceneManager; s_sceneManager = nullptr; }
 
     // UI System (frees its GL shader + mesh before the renderer goes away)
@@ -997,6 +1013,14 @@ void Engine::SetState(EngineState state) {
 
 void Engine::SetCameraFocus(const Vec3& focus) {
     s_cameraFocus = focus;
+}
+
+void Engine::ResetViewToBase() {
+    s_cameraYaw = Math::DegreesToRadians(45.0f);
+    s_cameraPitch = Math::DegreesToRadians(42.0f);
+    s_cameraDistance = 16.0f;
+    s_cameraFocus = Vec3(0.0f, 0.5f, 1.5f);
+    s_cameraFocusSmoothed = s_cameraFocus;
 }
 
 } // namespace Dnd

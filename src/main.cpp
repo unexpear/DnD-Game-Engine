@@ -12,6 +12,8 @@
  *   --width=N      Set window width (default: 1280)
  *   --height=N     Set window height (default: 720)
  *   --novsync      Disable VSync
+ *   --campaign=id  Load a campaign pack (default: dnd)
+ *   --list-campaigns  Print registered packs and exit
  * 
  * Exit codes:
  *   0  — Success. Engine ran and shut down normally.
@@ -25,9 +27,11 @@
 #include "core/engine.h"
 #include "core/log.h"
 #include "core/types.h"
+#include "campaign/campaign_registry.h"
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 // ============================================================================
 // Hybrid-GPU preference (laptops/desktops with Intel iGPU + a discrete GPU).
@@ -50,9 +54,10 @@ extern "C" {
  * @param outDebugLevel If true, debug logging should be enabled.
  * @return Configured EngineConfig.
  */
-static Dnd::EngineConfig ParseArguments(i32 argc, char* argv[], bool& outDebugLevel) {
+static Dnd::EngineConfig ParseArguments(i32 argc, char* argv[], bool& outDebugLevel, bool& outListCampaigns) {
     Dnd::EngineConfig config;
     outDebugLevel = false;
+    outListCampaigns = false;
 
     for (i32 i = 1; i < argc; i++) {
         const char* arg = argv[i];
@@ -75,6 +80,12 @@ static Dnd::EngineConfig ParseArguments(i32 argc, char* argv[], bool& outDebugLe
         else if (std::strcmp(arg, "--debug") == 0) {
             outDebugLevel = true;
         }
+        else if (std::strncmp(arg, "--campaign=", 11) == 0) {
+            config.campaignId = arg + 11;
+        }
+        else if (std::strcmp(arg, "--list-campaigns") == 0) {
+            outListCampaigns = true;
+        }
         else if (std::strcmp(arg, "--help") == 0 || std::strcmp(arg, "-h") == 0) {
             std::printf("D&D Game Engine\n");
             std::printf("Usage: DnDEngine [options]\n");
@@ -84,6 +95,8 @@ static Dnd::EngineConfig ParseArguments(i32 argc, char* argv[], bool& outDebugLe
             std::printf("  --width=N        Set window width\n");
             std::printf("  --height=N       Set window height\n");
             std::printf("  --novsync        Disable VSync\n");
+            std::printf("  --campaign=id    Load a campaign pack (default: dnd)\n");
+            std::printf("  --list-campaigns Print campaign packs and exit\n");
             std::printf("  --help, -h       Show this help\n");
             std::exit(0);
         }
@@ -96,15 +109,42 @@ static Dnd::EngineConfig ParseArguments(i32 argc, char* argv[], bool& outDebugLe
 }
 
 /**
+ * @brief Prints every registered campaign pack and exits the process via main.
+ * @return 0 when at least one pack is listed.
+ */
+static i32 ListCampaigns() {
+    Dnd::CampaignRegistry registry;
+    for (const std::string& root : Dnd::CampaignRegistry::DefaultSearchRoots()) {
+        const Dnd::CampaignScanReport report = registry.ScanDirectory(root);
+        for (const std::string& message : report.messages) {
+            std::fprintf(stderr, "campaign: %s\n", message.c_str());
+        }
+    }
+    registry.EnsureBuiltinDnd();
+    if (registry.All().empty()) {
+        std::fprintf(stderr, "No campaign packs found.\n");
+        return 1;
+    }
+    for (const Dnd::CampaignManifest& pack : registry.All()) {
+        std::printf("%s\t%s\t%s\t%s\n",
+                    pack.id.c_str(),
+                    pack.title.c_str(),
+                    pack.ruleset.c_str(),
+                    pack.entryScene.c_str());
+    }
+    return 0;
+}
+
+/**
  * @brief Application entry point.
- * 
+ *
  * Implementation:
  *   1. Parse command-line arguments
- *   2. Initialize the engine
- *   3. Run the main loop (blocks)
- *   4. Shutdown
- *   5. Return exit code
- * 
+ *   2. Optionally list campaign packs and exit
+ *   3. Initialize the engine
+ *   4. Run the main loop (blocks)
+ *   5. Shutdown
+ *
  * @param argc Argument count.
  * @param argv Argument strings.
  * @return 0 on success, 1 on initialization failure.
@@ -112,7 +152,12 @@ static Dnd::EngineConfig ParseArguments(i32 argc, char* argv[], bool& outDebugLe
 i32 main(i32 argc, char* argv[]) {
     // Step 1: Parse command-line arguments
     bool enableDebug = false;
-    Dnd::EngineConfig config = ParseArguments(argc, argv, enableDebug);
+    bool listCampaigns = false;
+    Dnd::EngineConfig config = ParseArguments(argc, argv, enableDebug, listCampaigns);
+
+    if (listCampaigns) {
+        return ListCampaigns();
+    }
 
     // Step 2: Initialize the engine
     if (!Dnd::Engine::Initialize(config)) {

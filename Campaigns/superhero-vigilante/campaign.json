@@ -1,0 +1,58 @@
+{
+  "format": "dndcampaign",
+  "formatVersion": 1,
+  "id": "superhero-vigilante",
+  "title": "Superhero Vigilante",
+  "genreTags": [
+    "vigilante",
+    "patrol",
+    "city"
+  ],
+  "ruleset": "tabletop-generic",
+  "assetsRoot": ".",
+  "entryScene": "campaign_table",
+  "entryScript": "",
+  "summary": "A patrol: vigilante and threat tokens.",
+  "sourceNote": "Desktop\\IDEAS\\superhero-vigilante-game",
+  "tableTokens": [
+    {
+      "name": "Vigilante",
+      "color": [
+        0.2,
+        0.22,
+        0.28
+      ],
+      "position": [
+        -1.4,
+        0.45,
+        0.3
+      ]
+    },
+    {
+      "name": "Threat",
+      "color": [
+        0.75,
+        0.22,
+        0.25
+      ],
+      "position": [
+        1.5,
+        0.45,
+        0.4
+      ]
+    },
+    {
+      "name": "Block",
+      "color": [
+        0.45,
+        0.48,
+        0.52
+      ],
+      "position": [
+        0.1,
+        0.45,
+        -0.9
+      ]
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "format": "dndcampaign",
+  "formatVersion": 1,
+  "id": "sandhold",
+  "title": "Sandhold",
+  "genreTags": [
+    "wasteland",
+    "wasteland-squad",
+    "survival"
+  ],
+  "ruleset": "tabletop-generic",
+  "assetsRoot": ".",
+  "entryScene": "campaign_table",
+  "entryScript": "",
+  "summary": "Wasteland squad around a camp token.",
+  "sourceNote": "Wasteland squad survival, played here as a campaign rather than a separate sim.",
+  "tableTokens": [
+    {
+      "name": "Scout",
+      "color": [
+        0.62,
+        0.55,
+        0.38
+      ],
+      "position": [
+        -1.6,
+        0.45,
+        0.5
+      ]
+    },
+    {
+      "name": "Medic",
+      "color": [
+        0.45,
+        0.62,
+        0.48
+      ],
+      "position": [
+        0.0,
+        0.45,
+        0.9
+      ]
+    },
+    {
+      "name": "Camp",
+      "color": [
+        0.72,
+        0.48,
+        0.28
+      ],
+      "position": [
+        1.6,
+        0.45,
+        -0.3
+      ]
+    }
+  ]
+}

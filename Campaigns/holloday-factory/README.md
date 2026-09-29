@@ -1,0 +1,21 @@
+# Holloday Factory
+
+Pack id: `holloday-factory`
+
+## Source
+
+Included from the platform brief so this title is not left out. This repository has no sibling survey to import, so the folder is a stub that still loads.
+
+## Tabletop mapping
+
+Treat a shift as a scene. Stations are tokens. A step on the line is a check, the same stretch used for Origami Factory: the table hosts the puzzle, it does not host a factory simulator. Spelling follows the request (`Holloday`).
+
+## What loads today
+
+Station, line, and quota tokens load so the pack can be selected without crashing.
+
+Ruleset module: `tabletop-generic`. Entry scene: `campaign_table`. `entryScript` is empty and is not executed. `assetsRoot` is this folder. The loader does not add it to the engine asset search path.
+
+## Isolation
+
+This directory is the only content root for the pack. It cannot replace engine defaults, the D&D demo, or another pack. Switching away drops this session's manifest and ruleset binding. See [docs/CAMPAIGNS.md](../../docs/CAMPAIGNS.md).

@@ -1,0 +1,58 @@
+{
+  "format": "dndcampaign",
+  "formatVersion": 1,
+  "id": "hunting",
+  "title": "Hunting",
+  "genreTags": [
+    "hunt",
+    "track",
+    "stub"
+  ],
+  "ruleset": "tabletop-generic",
+  "assetsRoot": ".",
+  "entryScene": "campaign_table",
+  "entryScript": "",
+  "summary": "Track, then a quarry token at the end of the path.",
+  "sourceNote": "Included from the platform brief so this title is not left out. This repository has no sibling survey to import, so the folder is a stub that still loads.",
+  "tableTokens": [
+    {
+      "name": "Hunter",
+      "color": [
+        0.4,
+        0.48,
+        0.3
+      ],
+      "position": [
+        -1.6,
+        0.45,
+        0.2
+      ]
+    },
+    {
+      "name": "Trail",
+      "color": [
+        0.55,
+        0.48,
+        0.32
+      ],
+      "position": [
+        0.0,
+        0.45,
+        0.8
+      ]
+    },
+    {
+      "name": "Quarry",
+      "color": [
+        0.62,
+        0.4,
+        0.28
+      ],
+      "position": [
+        1.7,
+        0.45,
+        -0.2
+      ]
+    }
+  ]
+}
