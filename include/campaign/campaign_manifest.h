@@ -57,8 +57,9 @@ struct CampaignManifest {
     std::string ruleset;            ///< Compiled-in ruleset module id.
     std::string assetsRoot;         ///< Relative asset root as written in the file.
     std::string resolvedAssetsRoot; ///< Absolute asset root, confined to the pack.
-    std::string entryScene;         ///< "dnd_demo" or "campaign_table".
+    std::string entryScene;         ///< "dnd_demo", "campaign_table", or "rpg_hopefully".
     std::string entryScript;        ///< Optional relative script path. Not executed.
+    std::string controlScheme;      ///< "base" or a pack id. Empty means base.
     std::string summary;
     std::string sourceNote;         ///< Where the original game lives, for authors.
     std::string packDirectory;      ///< Absolute directory that owns this manifest.

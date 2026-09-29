@@ -51,6 +51,7 @@
 #include "ecs/entity.h"
 #include "ecs/component.h"
 #include <cstring>
+#include <string>
 
 namespace Dnd {
 
@@ -85,6 +86,23 @@ Vec3 Engine::s_cameraFocusSmoothed = Vec3(0.0f, 0.5f, 1.5f);
 
 /** @brief Whether right mouse was held last frame. */
 static b8 s_wasRightMouseDown = false;
+
+/** @brief Tabletop orbit, unless the player has stepped inside the scene. */
+static ViewMode s_viewMode = ViewMode::Tabletop;
+
+/** @brief "base" is the D&D camera. Any other name means the pack owns WASD. */
+static std::string s_controlScheme = "base";
+
+/** @brief Immersed follow target published by the active scene. */
+static b8 s_hasSubject = false;
+static Vec3 s_subject = Vec3(0.0f, 0.0f, 0.0f);
+static f32 s_subjectYaw = 0.0f;
+static f32 s_lookYaw = 0.0f;
+static f32 s_lookPitch = 0.35f;
+
+/** @brief Last pose applied to the camera, including immersed view. */
+static Vec3 s_lastEye = Vec3(0.0f, 8.0f, 10.0f);
+static Vec3 s_lastLook = Vec3(0.0f, 0.5f, 0.0f);
 
 /** @brief Scene manager for ECS-based scene handling. */
 static SceneManager* s_sceneManager = nullptr;
@@ -257,16 +275,8 @@ b8 Engine::Initialize(const EngineConfig& config) {
             EntityManager& em = scene->GetEntityManager();
             ComponentRegistry& cr = scene->GetComponentRegistry();
 
-            f32 yaw = Engine::s_cameraYaw;
-            f32 pitch = Engine::s_cameraPitch;
-            f32 dist = Engine::s_cameraDistance;
-            f32 cx = std::cos(yaw) * std::cos(pitch) * dist;
-            f32 cy = std::sin(pitch) * dist;
-            f32 cz = std::sin(yaw) * std::cos(pitch) * dist;
-            Vec3 eye(Engine::s_cameraFocusSmoothed.x + cx,
-                     Engine::s_cameraFocusSmoothed.y + cy,
-                     Engine::s_cameraFocusSmoothed.z + cz);
-            Vec3 target = Engine::s_cameraFocusSmoothed;
+            const Vec3 eye = s_lastEye;
+            const Vec3 target = s_lastLook;
             Mat4 viewMat = Mat4::TRS(eye, Quat::LookAt(eye, target, Vec3(0,1,0)), Vec3(1,1,1)).Inverse();
 
             Mat4 projMat;
@@ -675,6 +685,11 @@ void Engine::HandleInput() {
         DND_LOG_INFO("Editor %s", EditorSettings::Get().editorActive ? "activated" : "deactivated");
     }
 
+    // F3: tabletop orbit vs a camera inside the environment.
+    if (Input::IsKeyPressed(KeyCode::F3) && !Input::IsTextInputActive()) {
+        Engine::ToggleViewMode();
+    }
+
     // ---- Orbit camera ----
     // Left-drag (or arrow keys) orbits around the battlefield; scroll zooms.
     // The camera always looks at the focal point, so it stays framed on the scene.
@@ -684,17 +699,20 @@ void Engine::HandleInput() {
     b8 editorUsingMouse = EditorSettings::Get().editorActive &&
         (DockManager::Get().IsDragging() || DockManager::Get().HitTest(Input::GetMouseX(), Input::GetMouseY()) != nullptr);
 
-    if (Input::IsMouseButtonDown(MouseButton::LEFT) && !UISystem::Get().IsCapturingMouse() && !editorUsingMouse) {
+    // A pack control scheme owns WASD. Arrows and the mouse still orbit the table.
+    const b8 baseControls = Engine::UsesBaseControls();
+    const b8 immersed = s_viewMode == ViewMode::Immersed;
+    if (!immersed && Input::IsMouseButtonDown(MouseButton::LEFT) && !UISystem::Get().IsCapturingMouse() && !editorUsingMouse) {
         s_cameraYaw   += Input::GetMouseDeltaX() * 0.005f;
         s_cameraPitch += Input::GetMouseDeltaY() * 0.005f;
     }
     // Keyboard camera controls are suppressed while typing in the command box.
-    if (!Input::IsTextInputActive()) {
+    if (!Input::IsTextInputActive() && !immersed) {
         const f32 keySpeed = 2.0f; // radians/second
-        if (Input::IsKeyDown(KeyCode::LEFT)  || Input::IsKeyDown(KeyCode::A)) s_cameraYaw   -= keySpeed * dt;
-        if (Input::IsKeyDown(KeyCode::RIGHT) || Input::IsKeyDown(KeyCode::D)) s_cameraYaw   += keySpeed * dt;
-        if (Input::IsKeyDown(KeyCode::UP)    || Input::IsKeyDown(KeyCode::W)) s_cameraPitch += keySpeed * dt;
-        if (Input::IsKeyDown(KeyCode::DOWN)  || Input::IsKeyDown(KeyCode::S)) s_cameraPitch -= keySpeed * dt;
+        if (Input::IsKeyDown(KeyCode::LEFT)  || (baseControls && Input::IsKeyDown(KeyCode::A))) s_cameraYaw   -= keySpeed * dt;
+        if (Input::IsKeyDown(KeyCode::RIGHT) || (baseControls && Input::IsKeyDown(KeyCode::D))) s_cameraYaw   += keySpeed * dt;
+        if (Input::IsKeyDown(KeyCode::UP)    || (baseControls && Input::IsKeyDown(KeyCode::W))) s_cameraPitch += keySpeed * dt;
+        if (Input::IsKeyDown(KeyCode::DOWN)  || (baseControls && Input::IsKeyDown(KeyCode::S))) s_cameraPitch -= keySpeed * dt;
         s_cameraDistance -= Input::GetScrollDelta() * 1.5f;
         // +/- keys (main row or numpad) also zoom.
         const f32 zoomKeySpeed = 10.0f; // units/second
@@ -716,7 +734,25 @@ void Engine::HandleInput() {
     s_cameraFocusSmoothed.x += (s_cameraFocus.x - s_cameraFocusSmoothed.x) * followLerp;
     s_cameraFocusSmoothed.y += (s_cameraFocus.y - s_cameraFocusSmoothed.y) * followLerp;
     s_cameraFocusSmoothed.z += (s_cameraFocus.z - s_cameraFocusSmoothed.z) * followLerp;
-    const Vec3 target = s_cameraFocusSmoothed;
+    Vec3 lookAt = s_cameraFocusSmoothed;
+
+    if (!Input::IsTextInputActive() && immersed) {
+        const f32 lookSpeed = 1.6f;
+        if (Input::IsMouseButtonDown(MouseButton::LEFT) && !UISystem::Get().IsCapturingMouse() && !editorUsingMouse) {
+            s_lookYaw += Input::GetMouseDeltaX() * 0.005f;
+            s_lookPitch += Input::GetMouseDeltaY() * 0.003f;
+        }
+        if (Input::IsKeyDown(KeyCode::LEFT))  s_lookYaw -= lookSpeed * dt;
+        if (Input::IsKeyDown(KeyCode::RIGHT)) s_lookYaw += lookSpeed * dt;
+        if (Input::IsKeyDown(KeyCode::UP))    s_lookPitch += lookSpeed * dt;
+        if (Input::IsKeyDown(KeyCode::DOWN))  s_lookPitch -= lookSpeed * dt;
+        if (baseControls) {
+            if (Input::IsKeyDown(KeyCode::A)) s_lookYaw -= lookSpeed * dt;
+            if (Input::IsKeyDown(KeyCode::D)) s_lookYaw += lookSpeed * dt;
+        }
+        if (s_lookPitch < -0.45f) s_lookPitch = -0.45f;
+        if (s_lookPitch > 0.85f) s_lookPitch = 0.85f;
+    }
 
     // ---- Gizmo mode switching (editor only) ----
     if (EditorSettings::Get().editorActive && !Input::IsTextInputActive()) {
@@ -830,14 +866,27 @@ void Engine::HandleInput() {
         }
     }
 
-    // Spherical orbit position around the target.
-    const f32 cp = std::cos(s_cameraPitch), sp = std::sin(s_cameraPitch);
-    const f32 cy = std::cos(s_cameraYaw),   sy = std::sin(s_cameraYaw);
-    const Vec3 eye(
-        target.x + s_cameraDistance * cp * sy,
-        target.y + s_cameraDistance * sp,
-        target.z + s_cameraDistance * cp * cy
-    );
+    Vec3 eye;
+    if (immersed) {
+        const f32 facing = (s_hasSubject ? s_subjectYaw : s_cameraYaw) + s_lookYaw;
+        const Vec3 subject = s_hasSubject ? s_subject : lookAt;
+        const f32 back = 3.3f;
+        const f32 rise = 1.55f + s_lookPitch;
+        eye = Vec3(subject.x - std::sin(facing) * back,
+                   subject.y + rise,
+                   subject.z - std::cos(facing) * back);
+        lookAt = Vec3(subject.x + std::sin(facing) * 1.2f,
+                      subject.y + 1.15f,
+                      subject.z + std::cos(facing) * 1.2f);
+    } else {
+        const f32 cp = std::cos(s_cameraPitch), sp = std::sin(s_cameraPitch);
+        const f32 cy = std::cos(s_cameraYaw),   sy = std::sin(s_cameraYaw);
+        eye = Vec3(lookAt.x + s_cameraDistance * cp * sy,
+                   lookAt.y + s_cameraDistance * sp,
+                   lookAt.z + s_cameraDistance * cp * cy);
+    }
+    s_lastEye = eye;
+    s_lastLook = lookAt;
 
     // Drive the active scene's camera entity.
     if (!s_sceneManager) return;
@@ -852,7 +901,7 @@ void Engine::HandleInput() {
         Transform* t = xfSet->Get(camSet->GetEntityIndex(i));
         if (t) {
             t->position = eye;
-            t->rotation = Quat::LookAt(eye, target, Vec3(0.0f, 1.0f, 0.0f));
+            t->rotation = Quat::LookAt(eye, lookAt, Vec3(0.0f, 1.0f, 0.0f));
         }
         break;
     }
@@ -875,8 +924,8 @@ void Engine::HandleInput() {
         f32 ndcX = (2.0f * mx / vpW) - 1.0f;
         f32 ndcY = 1.0f - (2.0f * my / vpH);
 
-        // Build camera view matrix from the orbit camera
-        Mat4 viewMat = Mat4::TRS(eye, Quat::LookAt(eye, target, Vec3(0,1,0)), Vec3(1,1,1)).Inverse();
+        // Build camera view matrix from the pose applied this frame.
+        Mat4 viewMat = Mat4::TRS(eye, Quat::LookAt(eye, lookAt, Vec3(0,1,0)), Vec3(1,1,1)).Inverse();
 
         // Get projection matrix from the active camera component
         Mat4 projMat;
@@ -1015,12 +1064,56 @@ void Engine::SetCameraFocus(const Vec3& focus) {
     s_cameraFocus = focus;
 }
 
+void Engine::SetViewSubject(const Vec3& position, f32 yawRadians) {
+    s_hasSubject = true;
+    s_subject = position;
+    s_subjectYaw = yawRadians;
+}
+
+f32 Engine::GetViewYaw() {
+    const f32 base = s_hasSubject ? s_subjectYaw : s_cameraYaw;
+    return base + s_lookYaw;
+}
+
+ViewMode Engine::GetViewMode() {
+    return s_viewMode;
+}
+
+void Engine::ToggleViewMode() {
+    s_viewMode = (s_viewMode == ViewMode::Tabletop) ? ViewMode::Immersed : ViewMode::Tabletop;
+    DND_LOG_INFO("View mode: %s", s_viewMode == ViewMode::Immersed ? "immersed" : "tabletop");
+}
+
+void Engine::SetPackControlScheme(const char* name) {
+    if (name == nullptr || name[0] == '\0' || std::strcmp(name, "base") == 0) {
+        s_controlScheme = "base";
+    } else {
+        s_controlScheme = name;
+    }
+    DND_LOG_INFO("Control scheme: %s", s_controlScheme.c_str());
+}
+
+b8 Engine::UsesBaseControls() {
+    return s_controlScheme == "base";
+}
+
+const char* Engine::GetControlScheme() {
+    return s_controlScheme.c_str();
+}
+
 void Engine::ResetViewToBase() {
     s_cameraYaw = Math::DegreesToRadians(45.0f);
     s_cameraPitch = Math::DegreesToRadians(42.0f);
     s_cameraDistance = 16.0f;
     s_cameraFocus = Vec3(0.0f, 0.5f, 1.5f);
     s_cameraFocusSmoothed = s_cameraFocus;
+    s_viewMode = ViewMode::Tabletop;
+    s_controlScheme = "base";
+    s_hasSubject = false;
+    s_subject = Vec3(0.0f, 0.0f, 0.0f);
+    s_subjectYaw = 0.0f;
+    s_lookYaw = 0.0f;
+    s_lookPitch = 0.35f;
 }
 
 } // namespace Dnd

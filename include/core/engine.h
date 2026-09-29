@@ -42,6 +42,18 @@ class Camera;
  * @enum EngineState
  * @brief High-level engine lifecycle states.
  */
+/**
+ * @enum ViewMode
+ * @brief Where the player is looking from.
+ *
+ * Tabletop is the orbit camera over the table. Immersed is a camera
+ * inside the environment, behind the active figure. One mode is active.
+ */
+enum class ViewMode : i32 {
+    Tabletop,   ///< Overall view. Current demo orbit.
+    Immersed    ///< In-game view behind the subject.
+};
+
 enum class EngineState : i32 {
     INITIALIZING,   ///< Subsystems are being set up. Not ready for game logic.
     RUNNING,        ///< Main loop active. Game logic and rendering executing.
@@ -153,10 +165,44 @@ public:
     static void SetCameraFocus(const Vec3& focus);
 
     /**
-     * @brief Restores the orbit camera to the base demo framing.
+     * @brief Publishes the figure the immersed camera should follow.
+     *
+     * Tabletop view ignores this and keeps the orbit. Immersed view sits
+     * behind @p position, looking along @p yawRadians plus mouse look.
+     * The D&D demo publishes Finn. A pack publishes its active figure.
+     * Cleared by ResetViewToBase.
+     */
+    static void SetViewSubject(const Vec3& position, f32 yawRadians);
+
+    /** @brief Yaw the camera is using, for pack movement (radians). */
+    static f32 GetViewYaw();
+
+    /** @brief Overall table orbit, or a camera inside the environment. */
+    static ViewMode GetViewMode();
+
+    /** @brief Switches tabletop and immersed. F3 calls this. */
+    static void ToggleViewMode();
+
+    /**
+     * @brief Names the control scheme that owns translation keys.
+     *
+     * "base" (or null/empty) is the D&D default: WASD orbits the table.
+     * Any other name means the active pack reads WASD itself. Unloading
+     * a pack must call ResetViewToBase, which restores "base".
+     */
+    static void SetPackControlScheme(const char* name);
+
+    /** @brief True when WASD still belongs to the tabletop camera. */
+    static b8 UsesBaseControls();
+
+    /** @brief Active scheme name. "base" is the D&D default. */
+    static const char* GetControlScheme();
+
+    /**
+     * @brief Restores the orbit camera, tabletop view, and base controls.
      *
      * Called when a campaign pack is activated so the previous pack's
-     * focus, zoom, and angles do not carry over.
+     * focus, zoom, angles, view mode, and control scheme do not carry over.
      */
     static void ResetViewToBase();
 

@@ -16,6 +16,7 @@
 #include "campaign/campaign_host.h"
 #include "campaign/campaign_session.h"
 #include "campaign/campaign_table_scene.h"
+#include "campaign/rpg_hopefully_scene.h"
 #include "core/engine.h"
 #include "core/input.h"
 #include "core/log.h"
@@ -62,6 +63,9 @@ std::unique_ptr<Scene> CreateEntryScene(const CampaignManifest& manifest) {
     if (manifest.entryScene == "campaign_table") {
         return std::make_unique<CampaignTableScene>(manifest);
     }
+    if (manifest.entryScene == "rpg_hopefully") {
+        return std::make_unique<RpgHopefullyScene>(manifest);
+    }
     return nullptr;
 }
 
@@ -88,6 +92,8 @@ b8 LoadActiveScene() {
     if (s_scenes->GetSceneCount() != 1) {
         DND_LOG_ERROR("Campaign load left %u scenes; expected 1", s_scenes->GetSceneCount());
     }
+    const std::string& scheme = s_session.Manifest().controlScheme;
+    Engine::SetPackControlScheme(scheme.empty() ? "base" : scheme.c_str());
     DND_LOG_INFO("Campaign active: %s (%s, ruleset %s, combat %s)",
                  s_session.ActiveId().c_str(),
                  s_session.Manifest().title.c_str(),
@@ -282,8 +288,9 @@ void CampaignHost::RenderChrome(const Mat4& ortho, f32 screenW, f32 screenH) {
 
     const char* title = s_session.IsActive() ? s_session.Manifest().title.c_str() : "Dungeons & Dragons";
     char chip[160];
-    std::snprintf(chip, sizeof(chip), "%s    F8 campaigns", title);
-    const f32 chipW = 360.0f;
+    const char* viewName = Engine::GetViewMode() == ViewMode::Immersed ? "inside" : "table";
+    std::snprintf(chip, sizeof(chip), "%s    F3 %s    F8 campaigns", title, viewName);
+    const f32 chipW = 460.0f;
     const f32 chipX = s_screenW * 0.5f - chipW * 0.5f;
     const f32 chipY = s_screenH - 28.0f;
     UIRenderer::DrawRect(chipX, chipY, chipW, 20.0f, Vec4(0.05f, 0.05f, 0.06f, 0.72f));

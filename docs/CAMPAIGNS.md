@@ -15,6 +15,17 @@ The flow is:
 
 A refused pick (unknown id, bad manifest) leaves the current playthrough where it is. Picking the pack that is already running does not reload it.
 
+## View and controls
+
+**F3** switches view for whichever pack is active:
+
+- **Table** is the orbit camera over the whole scene.
+- **Inside** is a camera behind the active figure (Finn in the demo, the selected class in RPG Hopefully).
+
+The D&D demo keeps base controls: WASD orbits the table, and the existing explore and combat loop is unchanged. A pack may name a `controlScheme` in its manifest. While that scheme is active the pack reads WASD itself. `ResetViewToBase` runs before the next scene loads and puts the view back to tabletop and the scheme back to `base`.
+
+`rpg-hopefully` is a playable slice: a practice yard, four classes, walking, and a d20 check. The other packs are still scaffolds with gap notes. See [ENGINE_GAPS.md](ENGINE_GAPS.md).
+
 ## What a pack is
 
 A pack is a directory:
@@ -34,8 +45,9 @@ Campaigns/<id>/
 | `genreTags` | no | Strings stored on the one active pack. |
 | `ruleset` | yes | Compiled-in module id. See below. |
 | `assetsRoot` | yes | Relative directory inside the pack. `"."` is the pack folder. |
-| `entryScene` | yes | `dnd_demo` or `campaign_table`. |
+| `entryScene` | yes | `dnd_demo`, `campaign_table`, or `rpg_hopefully`. |
 | `entryScript` | no | Relative path recorded for a future script. **Not executed.** |
+| `controlScheme` | no | `base`, empty (base), or a pack id. While it is not base, that scene owns WASD. |
 | `summary` | no | One line for the overlay. |
 | `sourceNote` | no | Where the original project lives on disk. |
 | `tableTokens` | no | Placeholder miniatures for `campaign_table`: `name`, `color` `[r,g,b]` in 0..1, `position` `[x,y,z]`. At most 8 are loaded. |
@@ -51,9 +63,10 @@ Example:
   "genreTags": ["dice", "class-cousin"],
   "ruleset": "tabletop-generic",
   "assetsRoot": ".",
-  "entryScene": "campaign_table",
+  "entryScene": "rpg_hopefully",
   "entryScript": "",
-  "summary": "Class and dice cousin, played with tokens on the same table.",
+  "controlScheme": "rpg-hopefully",
+  "summary": "Practice yard: walk a class and roll d20 plus its modifier.",
   "tableTokens": [
     { "name": "Hopeful", "color": [0.86, 0.55, 0.22], "position": [-1.6, 0.45, 0.4] }
   ]
@@ -71,7 +84,7 @@ Select a pack with:
 - `DnDEngine --campaign=rpg-hopefully` loads that one pack at startup.
 - **F8** opens the picker. Up/Down, Enter, Esc, number keys 1–9, or a click on a row. Enter unloads the current playthrough and loads the highlighted pack. Escape closes the picker and does not quit. F2, F5, and F6 stay the profiler, the editor, and pause.
 
-`rpg-hopefully` is the one sample with a working load path besides the demo: placeholder class tokens on `campaign_table`. The other folders are manifests so those games stay in the catalog. Selecting one still uses this same single-pack load; it does not start a second game.
+`rpg-hopefully` is the playable sample besides the demo: `RpgHopefullyScene` builds a practice yard, walks the selected class, and rolls a d20 check with `DiceRoller`. The other folders are manifests so those games stay in the catalog. Selecting one still uses this same single-pack load; it does not start a second game. What each title still needs from the engine is in [ENGINE_GAPS.md](ENGINE_GAPS.md).
 
 ## Isolation rules
 
@@ -80,7 +93,7 @@ Isolation means a switch cannot corrupt the base demo or keep the previous pack'
 - **One copy of the active manifest.** `CampaignSession` holds the pack you are playing. The next successful pick replaces that copy.
 - **Rules are a named module, not a plugin.** The only modules are `dnd5e` and `tabletop-generic`. `BindRuleset` fills a `RulesetBinding` on that one session (`dice`, `checkModel`, `usesEngineCombat`). It does not edit dice tables or combat globals. A pack cannot register a new module from disk. Unknown module ids are rejected.
 - **`dnd` is pinned.** The id `dnd` always runs entry scene `dnd_demo` and ruleset `dnd5e`, even if its file says otherwise. The title can still change. If the file is missing or unreadable, the host inserts a built-in manifest that loads the same demo.
-- **Entry scenes are an allowlist.** `dnd_demo` constructs the existing demo. `campaign_table` constructs `CampaignTableScene` from that pack's tokens. Any other `entryScene` is rejected. There is no "load this class name" field.
+- **Entry scenes are an allowlist.** `dnd_demo` constructs the existing demo. `campaign_table` constructs `CampaignTableScene` from that pack's tokens. `rpg_hopefully` constructs the practice yard. Any other `entryScene` is rejected. There is no "load this class name" field.
 - **`entryScript` is not run.** The string is stored and, when non-empty, logged. Godot scripts, Bevy apps, and other engines are not started.
 - **Paths stay inside the pack.** `assetsRoot` and `entryScript` must be relative. Absolute paths, drive letters, and `..` segments are rejected. The resolved asset directory must still sit inside the pack directory. The loader does **not** add that directory to `AssetManager`, so a pack cannot shadow `Assets/`.
 - **Ids do not collide.** The first registered id wins. A later folder with the same id is skipped. Scanning the same directory twice is a no-op.
@@ -90,7 +103,7 @@ Isolation means a switch cannot corrupt the base demo or keep the previous pack'
   - the editor undo stack
   - the selected entity
   - spotlight occluders
-  - the orbit camera (yaw, pitch, distance, focus)
+  - the orbit camera (yaw, pitch, distance, focus), the view mode, and the control scheme (`ResetViewToBase` restores tabletop and `base`)
 - The new scene then sets its own light. `CampaignTableScene` clears occluders each frame so a maze shadow set cannot linger. `DndDemoScene` installs its own key light when it loads. After a load, the scene stack size is one.
 - Editor toggles (grid, gizmo mode, whether the editor is open) are tool state, not pack content, and stay as the user left them.
 
@@ -105,14 +118,14 @@ Isolation means a switch cannot corrupt the base demo or keep the previous pack'
 5. Run `campaign_registry_test` (built with the engine). It loads every shipped manifest and checks the isolation cases.
 6. Launch with `--campaign=<id>` or pick the row with F8. The table should show the pack title and its tokens. Quit and launch with no arguments: the D&D demo is back.
 
-Do not add a new scene class per game until the table framing is real. A token and a summary are enough to reserve the id so the game is not dropped.
+A playable slice may add one allowlisted scene and a `controlScheme` when the fantasy needs its own space. Scaffold packs stay on `campaign_table`. A token and a summary are enough to reserve an id so the game is not dropped. Gap notes belong in the pack README and in [ENGINE_GAPS.md](ENGINE_GAPS.md).
 
 ## Shipped packs
 
 | Id | Original | On the table today |
 | --- | --- | --- |
 | `dnd` | This demo | Unchanged explore / combat loop |
-| `rpg-hopefully` | `C:\Users\micha\source\repos\rpg game hopefuly` | Sample pack. Class tokens, generic d20 binding |
+| `rpg-hopefully` | `C:\Users\micha\source\repos\rpg game hopefuly` | Playable yard: walk a class, roll d20+mod |
 | `rpggame` | `D:\dev\rpggame` (Bevy extraction RPG) | Raid framed as tokens. Not a Bevy port |
 | `sectorbound` | Voxel sandbox RPG | Sector, claim, and encounter tokens |
 | `sandhold` | Wasteland squad survival | Squad and camp tokens |

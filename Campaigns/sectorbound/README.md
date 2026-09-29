@@ -16,6 +16,10 @@ Sector, claim, and encounter tokens load as placeholders.
 
 Ruleset module: `tabletop-generic`. Entry scene: `campaign_table`. `entryScript` is empty and is not executed. `assetsRoot` is this folder. The loader does not add it to the engine asset search path.
 
+## Gaps
+
+A voxel sandbox needs chunk streaming, meshing, a block palette, edit tools, voxel collision, and a world save. The rigid-body spatial hash is not that world. This pack does not load any of it. Details: [docs/ENGINE_GAPS.md](../../docs/ENGINE_GAPS.md).
+
 ## Isolation
 
 One campaign is on the table at a time. Choosing another pack unloads this one, then loads that pack. This folder cannot change engine defaults. See [docs/CAMPAIGNS.md](../../docs/CAMPAIGNS.md).

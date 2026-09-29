@@ -16,6 +16,10 @@ Three placeholder tokens load on `campaign_table`. No Bevy runtime, levels, or a
 
 Ruleset module: `tabletop-generic`. Entry scene: `campaign_table`. `entryScript` is empty and is not executed. `assetsRoot` is this folder. The loader does not add it to the engine asset search path.
 
+## Gaps
+
+Rebuilding the Bevy extraction game needs a level importer (glTF or Bevy scenes; the loader reads OBJ), an FPS weapon camera, hitscan or projectiles, guard perception, an extraction clock, cover collision, and co-op replication. `entryScript` does not start Bevy. F3's immersed view is a third-person boom. Details: [docs/ENGINE_GAPS.md](../../docs/ENGINE_GAPS.md).
+
 ## Isolation
 
 One campaign is on the table at a time. Choosing another pack unloads this one, then loads that pack. This folder cannot change engine defaults. See [docs/CAMPAIGNS.md](../../docs/CAMPAIGNS.md).

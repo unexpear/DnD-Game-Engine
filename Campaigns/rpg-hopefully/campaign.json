@@ -10,8 +10,9 @@
   ],
   "ruleset": "tabletop-generic",
   "assetsRoot": ".",
-  "entryScene": "campaign_table",
+  "entryScene": "rpg_hopefully",
   "entryScript": "",
+  "controlScheme": "rpg-hopefully",
   "summary": "Class and dice cousin, played with tokens on the same table.",
   "sourceNote": "C:\\Users\\micha\\source\\repos\\rpg game hopefuly",
   "tableTokens": [

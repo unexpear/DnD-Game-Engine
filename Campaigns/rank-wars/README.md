@@ -16,6 +16,10 @@ Attacker, defender, and rank tokens load as placeholders.
 
 Ruleset module: `tabletop-generic`. Entry scene: `campaign_table`. `entryScript` is empty and is not executed. `assetsRoot` is this folder. The loader does not add it to the engine asset search path.
 
+## Gaps
+
+Rank battles need an arena, trigger loadouts as data, beams or projectiles, round structure, stored rank, and versus networking. None of those are engine services. Tokens are the whole load. Details: [docs/ENGINE_GAPS.md](../../docs/ENGINE_GAPS.md).
+
 ## Isolation
 
 One campaign is on the table at a time. Choosing another pack unloads this one, then loads that pack. This folder cannot change engine defaults. See [docs/CAMPAIGNS.md](../../docs/CAMPAIGNS.md).

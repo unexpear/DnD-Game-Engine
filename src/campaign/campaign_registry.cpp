@@ -35,6 +35,10 @@ b8 CampaignRegistry::Add(CampaignManifest manifest, std::string& error) {
             manifest.ruleset = "dnd5e";
             manifest.pinnedBase = true;
         }
+        if (!manifest.controlScheme.empty() && manifest.controlScheme != "base") {
+            manifest.controlScheme = "base";
+            manifest.pinnedBase = true;
+        }
     }
 
     if (!IsAllowedEntryScene(manifest.entryScene)) {

@@ -190,7 +190,8 @@ b8 ReadTokens(const JsonValue& root, CampaignManifest& manifest, std::string& er
 } // namespace
 
 b8 IsAllowedEntryScene(const std::string& entryScene) {
-    return entryScene == "dnd_demo" || entryScene == "campaign_table";
+    return entryScene == "dnd_demo" || entryScene == "campaign_table" ||
+           entryScene == "rpg_hopefully";
 }
 
 CampaignManifest MakeBuiltinDndManifest() {
@@ -259,6 +260,12 @@ b8 LoadCampaignManifestFile(const std::string& campaignJsonPath,
     manifest.entryScript = root.GetString("entryScript", "");
     if (!manifest.entryScript.empty() && !IsSafeRelativePath(manifest.entryScript, error)) {
         error = "entryScript: " + error;
+        return false;
+    }
+    manifest.controlScheme = root.GetString("controlScheme", "");
+    if (!manifest.controlScheme.empty() && manifest.controlScheme != "base" &&
+        !IsSafeId(manifest.controlScheme)) {
+        error = "controlScheme must be base or a pack id";
         return false;
     }
 
