@@ -24,7 +24,7 @@ A refused pick (unknown id, bad manifest) leaves the current playthrough where i
 
 The D&D demo keeps base controls: WASD orbits the table, and the existing explore and combat loop is unchanged. A pack may name a `controlScheme` in its manifest. While that scheme is active the pack reads WASD itself. `ResetViewToBase` runs before the next scene loads and puts the view back to tabletop and the scheme back to `base`.
 
-`rpg-hopefully` is a playable slice: a practice yard, four classes, walking, and a d20 check. `sectorbound` is a playable outpost: a block yard, a scout, a survey marker, and a beacon scan. The other packs are still scaffolds with gap notes. See [ENGINE_GAPS.md](ENGINE_GAPS.md).
+`rpg-hopefully` is a playable slice: a practice yard, four classes, walking, and a d20 check. `sectorbound` is a playable outpost: a block yard, a scout, a survey marker, and a beacon scan. `sandhold` is a playable courtyard: dunes, a campfire rest, and a gate brace. The other packs are still scaffolds with gap notes. See [ENGINE_GAPS.md](ENGINE_GAPS.md).
 
 ## What a pack is
 
@@ -45,7 +45,7 @@ Campaigns/<id>/
 | `genreTags` | no | Strings stored on the one active pack. |
 | `ruleset` | yes | Compiled-in module id. See below. |
 | `assetsRoot` | yes | Relative directory inside the pack. `"."` is the pack folder. |
-| `entryScene` | yes | `dnd_demo`, `campaign_table`, `rpg_hopefully`, or `sectorbound`. |
+| `entryScene` | yes | `dnd_demo`, `campaign_table`, `rpg_hopefully`, `sectorbound`, or `sandhold`. |
 | `entryScript` | no | Relative path recorded for a future script. **Not executed.** |
 | `controlScheme` | no | `base`, empty (base), or a pack id. While it is not base, that scene owns WASD. |
 | `summary` | no | One line for the overlay. |
@@ -84,7 +84,7 @@ Select a pack with:
 - `DnDEngine --campaign=rpg-hopefully` loads that one pack at startup.
 - **F8** opens the picker. Up/Down, Enter, Esc, number keys 1–9, or a click on a row. Enter unloads the current playthrough and loads the highlighted pack. Escape closes the picker and does not quit. F2, F5, and F6 stay the profiler, the editor, and pause.
 
-`rpg-hopefully` and `sectorbound` are playable slices besides the demo. `RpgHopefullyScene` walks a class and rolls a d20 check. `SectorboundScene` walks a scout through a block outpost, stows a marker, and scans a beacon with `DiceRoller`. The other folders are manifests so those games stay in the catalog. Selecting one still uses this same single-pack load; it does not start a second game. What each title still needs from the engine is in [ENGINE_GAPS.md](ENGINE_GAPS.md).
+`rpg-hopefully`, `sectorbound`, and `sandhold` are playable slices besides the demo. `RpgHopefullyScene` walks a class and rolls a d20 check. `SectorboundScene` walks a scout through a block outpost, stows a marker, and scans a beacon with `DiceRoller`. `SandholdScene` walks a warden through a sandy courtyard, rests at the fire, and braces the gate. The other folders are manifests so those games stay in the catalog. Selecting one still uses this same single-pack load; it does not start a second game. What each title still needs from the engine is in [ENGINE_GAPS.md](ENGINE_GAPS.md).
 
 ## Isolation rules
 
@@ -93,7 +93,7 @@ Isolation means a switch cannot corrupt the base demo or keep the previous pack'
 - **One copy of the active manifest.** `CampaignSession` holds the pack you are playing. The next successful pick replaces that copy.
 - **Rules are a named module, not a plugin.** The only modules are `dnd5e` and `tabletop-generic`. `BindRuleset` fills a `RulesetBinding` on that one session (`dice`, `checkModel`, `usesEngineCombat`). It does not edit dice tables or combat globals. A pack cannot register a new module from disk. Unknown module ids are rejected.
 - **`dnd` is pinned.** The id `dnd` always runs entry scene `dnd_demo` and ruleset `dnd5e`, even if its file says otherwise. The title can still change. If the file is missing or unreadable, the host inserts a built-in manifest that loads the same demo.
-- **Entry scenes are an allowlist.** `dnd_demo` constructs the existing demo. `campaign_table` constructs `CampaignTableScene` from that pack's tokens. `rpg_hopefully` constructs the practice yard. `sectorbound` constructs the block outpost. Any other `entryScene` is rejected. There is no "load this class name" field.
+- **Entry scenes are an allowlist.** `dnd_demo` constructs the existing demo. `campaign_table` constructs `CampaignTableScene` from that pack's tokens. `rpg_hopefully` constructs the practice yard. `sectorbound` constructs the block outpost. `sandhold` constructs the sandy courtyard. Any other `entryScene` is rejected. There is no "load this class name" field.
 - **`entryScript` is not run.** The string is stored and, when non-empty, logged. Godot scripts, Bevy apps, and other engines are not started.
 - **Paths stay inside the pack.** `assetsRoot` and `entryScript` must be relative. Absolute paths, drive letters, and `..` segments are rejected. The resolved asset directory must still sit inside the pack directory. The loader does **not** add that directory to `AssetManager`, so a pack cannot shadow `Assets/`.
 - **Ids do not collide.** The first registered id wins. A later folder with the same id is skipped. Scanning the same directory twice is a no-op.
@@ -128,7 +128,7 @@ A playable slice may add one allowlisted scene and a `controlScheme` when the fa
 | `rpg-hopefully` | `C:\Users\micha\source\repos\rpg game hopefuly` | Playable yard: walk a class, roll d20+mod |
 | `rpggame` | `D:\dev\rpggame` (Bevy extraction RPG) | Raid framed as tokens. Not a Bevy port |
 | `sectorbound` | Voxel sandbox RPG | Playable outpost: walk a scout, stow a marker, scan the beacon |
-| `sandhold` | Wasteland squad survival | Squad and camp tokens |
+| `sandhold` | Wasteland squad survival | Playable courtyard: walk a warden, rest at the fire, brace the gate |
 | `rank-wars` | World Trigger rank battles | Two sides and a rank token |
 | `pirate-games` | Pirate sandbox | Ship, crew, and port tokens |
 | `ofa-origami-factory` | Origami / factory puzzles | Bench and fold-step tokens |

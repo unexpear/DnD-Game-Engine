@@ -7,7 +7,7 @@ Update this file when a system lands, and keep the matching `## Gaps` section in
 ## What a pack can use today
 
 - One active manifest, one entry scene, one ruleset binding (`dnd5e` or `tabletop-generic`).
-- Allowlisted scenes: `dnd_demo` (the current maze, dice, traps, and combat), `campaign_table` (up to eight colored tokens), `rpg_hopefully` (practice yard), `sectorbound` (block outpost).
+- Allowlisted scenes: `dnd_demo` (the current maze, dice, traps, and combat), `campaign_table` (up to eight colored tokens), `rpg_hopefully` (practice yard), `sectorbound` (block outpost), `sandhold` (sandy courtyard).
 - **F3** switches tabletop orbit and an in-game camera behind a subject the scene publishes. **F8** picks the next pack and unloads the previous one.
 - A pack may set `controlScheme`. While it is not `base`, that scene reads WASD. Unload calls `ResetViewToBase`, which restores tabletop view and base D&D controls.
 - `DiceRoller` for table checks. Forward OpenGL with one spotlight list and optional occluders. Procedural cubes and quads. OBJ meshes and image textures through `AssetManager`, which packs do **not** mount.
@@ -21,7 +21,7 @@ The play path is a forward pass: meshes, a key spotlight, and maze occluders in 
 
 ### Physics
 
-`PhysicsSystem` integrates rigid bodies and resolves contacts with a spatial hash. Campaign scenes do not register it. The demo's dice checks are `DiceRoller`, not tumbling dice bodies. Sectorbound stops its scout with a pack-local box test against a fixed list of cubes. Missing: a shared character controller, vehicles, buoyancy, destruction, soft bodies, collision against an editable voxel volume, and a query API packs can call without editing the engine scene.
+`PhysicsSystem` integrates rigid bodies and resolves contacts with a spatial hash. Campaign scenes do not register it. The demo's dice checks are `DiceRoller`, not tumbling dice bodies. Sectorbound stops its scout, and Sandhold its warden, with a pack-local box test against a fixed list of cubes. Missing: a shared character controller, vehicles, buoyancy, destruction, soft bodies, collision against an editable voxel volume, and a query API packs can call without editing the engine scene.
 
 ### Networking
 
@@ -63,7 +63,7 @@ Ships a real slice: a fixed cube outpost (floor grid, wall, crates, beacon, gate
 
 ### sandhold
 
-Squad survival needs needs-meters, inventory, a camp that persists, travel across a wasteland map, and squad coordination. The engine can show a few tokens and roll a check. It cannot simulate scarcity, path a squad, or save the camp. Combat would fall through to the D&D beat only if a future scene opts into `dnd5e`; this pack's binding does not.
+Ships a real slice: a sandy courtyard (floor, dunes, tent, crate, torch, altar, campfire), one warden, WASD walk with a pack-local box test, F at the fire to rest (+2), and F at the north gate for a `DiceRoller` d20+bonus vs DC 12. Success lifts the dust bar. F3 sits behind the warden. The Sandhold repository is not imported. The rest and the brace die with the scene, so unloading drops the hold. Still missing: needs meters, inventory, a camp save, a travel map, more than one squad member, and squad pathing. This pack's ruleset does not enter the demo combat loop. `tableTokens` still name Scout, Medic, and Camp; the scene places its own props.
 
 ### rank-wars
 

@@ -191,7 +191,8 @@ b8 ReadTokens(const JsonValue& root, CampaignManifest& manifest, std::string& er
 
 b8 IsAllowedEntryScene(const std::string& entryScene) {
     return entryScene == "dnd_demo" || entryScene == "campaign_table" ||
-           entryScene == "rpg_hopefully" || entryScene == "sectorbound";
+           entryScene == "rpg_hopefully" || entryScene == "sectorbound" ||
+           entryScene == "sandhold";
 }
 
 CampaignManifest MakeBuiltinDndManifest() {
@@ -248,7 +249,7 @@ b8 LoadCampaignManifestFile(const std::string& campaignJsonPath,
     }
     manifest.entryScene = root.GetString("entryScene", "");
     if (!IsAllowedEntryScene(manifest.entryScene)) {
-        error = "entryScene must be dnd_demo, campaign_table, rpg_hopefully, or sectorbound";
+        error = "entryScene must be dnd_demo, campaign_table, rpg_hopefully, sectorbound, or sandhold";
         return false;
     }
 

@@ -10,9 +10,10 @@
   ],
   "ruleset": "tabletop-generic",
   "assetsRoot": ".",
-  "entryScene": "campaign_table",
+  "entryScene": "sandhold",
   "entryScript": "",
-  "summary": "Wasteland squad around a camp token.",
+  "controlScheme": "sandhold",
+  "summary": "Courtyard: walk the warden, rest at the fire, brace the gate.",
   "sourceNote": "Wasteland squad survival, played here as a campaign rather than a separate sim.",
   "tableTokens": [
     {

@@ -17,6 +17,7 @@
 #include "campaign/campaign_session.h"
 #include "campaign/campaign_table_scene.h"
 #include "campaign/rpg_hopefully_scene.h"
+#include "campaign/sandhold_scene.h"
 #include "campaign/sectorbound_scene.h"
 #include "core/engine.h"
 #include "core/input.h"
@@ -69,6 +70,9 @@ std::unique_ptr<Scene> CreateEntryScene(const CampaignManifest& manifest) {
     }
     if (manifest.entryScene == "sectorbound") {
         return std::make_unique<SectorboundScene>(manifest);
+    }
+    if (manifest.entryScene == "sandhold") {
+        return std::make_unique<SandholdScene>(manifest);
     }
     return nullptr;
 }

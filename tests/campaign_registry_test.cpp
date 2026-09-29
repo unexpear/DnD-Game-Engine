@@ -106,6 +106,12 @@ int main() {
             Expect(pack->controlScheme == "sectorbound", "sectorbound names its controls");
             Expect(pack->ruleset == "tabletop-generic", "sectorbound ruleset");
             Expect(!pack->tableTokens.empty(), "sectorbound still describes its tokens");
+        } else if (id == "sandhold") {
+            Expect(pack->entryScene == "sandhold", "sandhold has its own scene");
+            Expect(pack->controlScheme == "sandhold", "sandhold names its controls");
+            Expect(pack->ruleset == "tabletop-generic", "sandhold ruleset");
+            Expect(!pack->tableTokens.empty(), "sandhold still describes its tokens");
+            Expect(HasTag(*pack, "wasteland-squad"), "sandhold keeps its squad tag");
         } else {
             Expect(pack->entryScene == "campaign_table", id + " uses the shared table scene");
             Expect(pack->ruleset == "tabletop-generic", id + " uses the generic ruleset");
