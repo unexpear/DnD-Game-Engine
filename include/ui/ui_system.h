@@ -148,6 +148,15 @@ public:
     void DestroyWidget(const std::string& name);
 
     /**
+     * @brief Destroys every widget and leaves the UI renderer running.
+     *
+     * Campaign switches call this so one pack's panels (the demo light
+     * sliders, for example) do not remain on the next pack's table.
+     * The next scene creates whatever widgets it needs during OnLoad.
+     */
+    void ClearWidgets();
+
+    /**
      * @brief Sets the screen dimensions.
      * @param width Screen width in pixels.
      * @param height Screen height in pixels.

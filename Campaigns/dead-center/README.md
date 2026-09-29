@@ -1,0 +1,25 @@
+# Dead Center
+
+Pack id: `dead-center`
+
+## Source
+
+Included from the platform brief so this title is not left out. This repository has no sibling survey to import, so the folder is a stub that still loads.
+
+## Tabletop mapping
+
+The center token is the ground the party holds. Pressure comes in as enemy tokens. The scene is a last stand using the table's combat beat. No separate horde sim is ported. The name is reserved so the title is not dropped.
+
+## What loads today
+
+Center, holder, and pressure tokens load as placeholders.
+
+Ruleset module: `tabletop-generic`. Entry scene: `campaign_table`. `entryScript` is empty and is not executed. `assetsRoot` is this folder. The loader does not add it to the engine asset search path.
+
+## Gaps
+
+A holdout needs wave spawning, a director, weapon feedback, and cover that breaks. This pack does not enter the demo combat loop. There is no horde system and no destruction. Details: [docs/ENGINE_GAPS.md](../../docs/ENGINE_GAPS.md).
+
+## Isolation
+
+One campaign is on the table at a time. Choosing another pack unloads this one, then loads that pack. This folder cannot change engine defaults. See [docs/CAMPAIGNS.md](../../docs/CAMPAIGNS.md).

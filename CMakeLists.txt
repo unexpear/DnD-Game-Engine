@@ -75,6 +75,7 @@ file(GLOB_RECURSE NETWORK_SRC CONFIGURE_DEPENDS "src/network/*.cpp" "src/network
 file(GLOB_RECURSE ASSETS_SRC CONFIGURE_DEPENDS "src/assets/*.cpp" "src/assets/*.c")
 file(GLOB_RECURSE GAME_SRC CONFIGURE_DEPENDS "src/game/*.cpp" "src/game/*.c")
 file(GLOB_RECURSE AI_SRC CONFIGURE_DEPENDS "src/ai/*.cpp" "src/ai/*.c")
+file(GLOB_RECURSE CAMPAIGN_SRC CONFIGURE_DEPENDS "src/campaign/*.cpp" "src/campaign/*.c")
 
 # Combine all source lists into a single variable for the executable target.
 set(ALL_SRC
@@ -91,6 +92,7 @@ set(ALL_SRC
     ${ASSETS_SRC}
     ${GAME_SRC}
     ${AI_SRC}
+    ${CAMPAIGN_SRC}
 )
 
 # ==========================================
@@ -105,6 +107,12 @@ add_executable(${PROJECT_NAME} ${ALL_SRC} src/main.cpp)
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+# Source-tree root so the campaign loader can find Campaigns/ when the
+# process is not started from the repository root.
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    DND_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
 
 # ==========================================
@@ -187,4 +195,28 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     ${CMAKE_SOURCE_DIR}/Assets
     $<TARGET_FILE_DIR:${PROJECT_NAME}>/Assets
     COMMENT "Copying assets to build directory..."
+)
+
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/Campaigns
+    $<TARGET_FILE_DIR:${PROJECT_NAME}>/Campaigns
+    COMMENT "Copying campaign packs to build directory..."
+)
+
+# Headless checks for pack discovery and session isolation. Does not link
+# the renderer, so it can run without a display.
+add_executable(campaign_registry_test
+    tests/campaign_registry_test.cpp
+    src/campaign/campaign_manifest.cpp
+    src/campaign/campaign_registry.cpp
+    src/campaign/campaign_ruleset.cpp
+    src/campaign/campaign_session.cpp
+    src/core/json.cpp
+)
+target_include_directories(campaign_registry_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+target_compile_definitions(campaign_registry_test PRIVATE
+    DND_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )

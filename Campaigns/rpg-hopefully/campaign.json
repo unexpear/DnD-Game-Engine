@@ -1,0 +1,72 @@
+{
+  "format": "dndcampaign",
+  "formatVersion": 1,
+  "id": "rpg-hopefully",
+  "title": "RPG Hopefully",
+  "genreTags": [
+    "dice",
+    "class-cousin",
+    "tabletop"
+  ],
+  "ruleset": "tabletop-generic",
+  "assetsRoot": ".",
+  "entryScene": "rpg_hopefully",
+  "entryScript": "",
+  "controlScheme": "rpg-hopefully",
+  "summary": "Class and dice cousin, played with tokens on the same table.",
+  "sourceNote": "C:\\Users\\micha\\source\\repos\\rpg game hopefuly",
+  "tableTokens": [
+    {
+      "name": "Hopeful",
+      "color": [
+        0.86,
+        0.55,
+        0.22
+      ],
+      "position": [
+        -2.2,
+        0.45,
+        0.2
+      ]
+    },
+    {
+      "name": "Warden",
+      "color": [
+        0.3,
+        0.5,
+        0.82
+      ],
+      "position": [
+        -0.7,
+        0.45,
+        0.8
+      ]
+    },
+    {
+      "name": "Hexer",
+      "color": [
+        0.55,
+        0.28,
+        0.72
+      ],
+      "position": [
+        0.8,
+        0.45,
+        0.5
+      ]
+    },
+    {
+      "name": "Chorus",
+      "color": [
+        0.85,
+        0.78,
+        0.35
+      ],
+      "position": [
+        2.2,
+        0.45,
+        -0.2
+      ]
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "format": "dndcampaign",
+  "formatVersion": 1,
+  "id": "ofa-origami-factory",
+  "title": "Origami Factory",
+  "genreTags": [
+    "puzzle",
+    "factory",
+    "origami"
+  ],
+  "ruleset": "tabletop-generic",
+  "assetsRoot": ".",
+  "entryScene": "campaign_table",
+  "entryScript": "",
+  "summary": "A fold is a check. The bench is the table.",
+  "sourceNote": "Origami Factory / OFA. Puzzle-factory play, stretched onto the tabletop loop on purpose.",
+  "tableTokens": [
+    {
+      "name": "Bench",
+      "color": [
+        0.55,
+        0.48,
+        0.4
+      ],
+      "position": [
+        0.0,
+        0.45,
+        0.0
+      ]
+    },
+    {
+      "name": "Fold",
+      "color": [
+        0.82,
+        0.82,
+        0.78
+      ],
+      "position": [
+        -1.6,
+        0.45,
+        0.7
+      ]
+    },
+    {
+      "name": "Sheet",
+      "color": [
+        0.9,
+        0.55,
+        0.55
+      ],
+      "position": [
+        1.6,
+        0.45,
+        -0.4
+      ]
+    }
+  ]
+}

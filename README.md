@@ -110,3 +110,7 @@ This project aims to create a fully custom D&D game engine that supports:
 - User interface improvements
 - Documentation and tutorials
 - Testing and bug fixes
+
+## Campaign packs
+
+The current D&D demo is the campaign that loads on boot. F8 or `--campaign=<id>` unloads it and loads one other pack. F3 switches the tabletop camera and an in-game camera. Packs do not run side by side. Format, controls, and gaps are in [docs/CAMPAIGNS.md](docs/CAMPAIGNS.md) and [docs/ENGINE_GAPS.md](docs/ENGINE_GAPS.md).

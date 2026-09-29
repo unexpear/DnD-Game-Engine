@@ -1,0 +1,58 @@
+{
+  "format": "dndcampaign",
+  "formatVersion": 1,
+  "id": "life-sim-bench",
+  "title": "Life Sim Bench",
+  "genreTags": [
+    "simulation",
+    "scenario",
+    "lab"
+  ],
+  "ruleset": "tabletop-generic",
+  "assetsRoot": ".",
+  "entryScene": "campaign_table",
+  "entryScript": "",
+  "summary": "Each lab is a scenario token on the table.",
+  "sourceNote": "Simulation labs. Scenarios are framed as table encounters when a full sim is the wrong host.",
+  "tableTokens": [
+    {
+      "name": "Bench",
+      "color": [
+        0.4,
+        0.42,
+        0.48
+      ],
+      "position": [
+        0.0,
+        0.45,
+        -0.4
+      ]
+    },
+    {
+      "name": "Lab A",
+      "color": [
+        0.35,
+        0.7,
+        0.75
+      ],
+      "position": [
+        -1.6,
+        0.45,
+        0.6
+      ]
+    },
+    {
+      "name": "Lab B",
+      "color": [
+        0.75,
+        0.55,
+        0.35
+      ],
+      "position": [
+        1.6,
+        0.45,
+        0.6
+      ]
+    }
+  ]
+}

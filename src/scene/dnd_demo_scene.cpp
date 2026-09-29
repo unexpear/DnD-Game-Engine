@@ -1665,8 +1665,18 @@ void DndDemoScene::OnUpdate(f32 deltaTime) {
     }
 
     // The orbit camera follows the hero as he threads the maze.
-    if (const Transform* hero = m_componentRegistry.GetComponent<Transform>(m_rogue))
+    // Immersed view (F3) sits behind him using the rig's facing.
+    if (const Transform* hero = m_componentRegistry.GetComponent<Transform>(m_rogue)) {
         Engine::SetCameraFocus(Vec3(hero->position.x, 0.5f, hero->position.z));
+        f32 yaw = 0.0f;
+        for (const CharacterRig& rig : m_rigs) {
+            if (rig.root == m_rogue) {
+                yaw = rig.yaw;
+                break;
+            }
+        }
+        Engine::SetViewSubject(hero->position, yaw);
+    }
 
     // Each beat the next attacker acts. Melee attackers dash in, bump (damage),
     // and run back; ranged attackers stay put and launch a projectile (a sphere

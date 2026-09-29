@@ -1,0 +1,58 @@
+{
+  "format": "dndcampaign",
+  "formatVersion": 1,
+  "id": "icarus-like-survival",
+  "title": "Icarus-like Survival",
+  "genreTags": [
+    "survival",
+    "drop",
+    "storm"
+  ],
+  "ruleset": "tabletop-generic",
+  "assetsRoot": ".",
+  "entryScene": "campaign_table",
+  "entryScript": "",
+  "summary": "A drop, a storm, and the walk back to the lander.",
+  "sourceNote": "Desktop\\IDEAS\\icarus-like-survival",
+  "tableTokens": [
+    {
+      "name": "Lander",
+      "color": [
+        0.72,
+        0.74,
+        0.78
+      ],
+      "position": [
+        -1.6,
+        0.45,
+        -0.2
+      ]
+    },
+    {
+      "name": "Prospector",
+      "color": [
+        0.4,
+        0.62,
+        0.38
+      ],
+      "position": [
+        0.2,
+        0.45,
+        0.7
+      ]
+    },
+    {
+      "name": "Storm",
+      "color": [
+        0.45,
+        0.55,
+        0.7
+      ],
+      "position": [
+        1.7,
+        0.45,
+        0.2
+      ]
+    }
+  ]
+}

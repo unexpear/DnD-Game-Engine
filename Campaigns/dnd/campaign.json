@@ -1,0 +1,19 @@
+{
+  "format": "dndcampaign",
+  "formatVersion": 1,
+  "id": "dnd",
+  "title": "Dungeons & Dragons",
+  "genreTags": [
+    "tabletop",
+    "fantasy",
+    "5e",
+    "explore",
+    "combat"
+  ],
+  "ruleset": "dnd5e",
+  "assetsRoot": ".",
+  "entryScene": "dnd_demo",
+  "entryScript": "",
+  "summary": "Canonical base campaign. Maze explore, dice, and combat.",
+  "sourceNote": "This repository. The engine play loop is the base state."
+}

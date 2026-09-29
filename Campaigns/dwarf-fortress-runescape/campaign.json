@@ -1,0 +1,58 @@
+{
+  "format": "dndcampaign",
+  "formatVersion": 1,
+  "id": "dwarf-fortress-runescape",
+  "title": "Dwarf Fortress x RuneScape",
+  "genreTags": [
+    "fortress",
+    "delve",
+    "overworld"
+  ],
+  "ruleset": "tabletop-generic",
+  "assetsRoot": ".",
+  "entryScene": "campaign_table",
+  "entryScript": "",
+  "summary": "A fort token and a delve token share the table.",
+  "sourceNote": "Desktop\\IDEAS\\dwarf-fortress-runescape",
+  "tableTokens": [
+    {
+      "name": "Fort",
+      "color": [
+        0.55,
+        0.42,
+        0.32
+      ],
+      "position": [
+        -1.5,
+        0.45,
+        0.2
+      ]
+    },
+    {
+      "name": "Delve",
+      "color": [
+        0.35,
+        0.32,
+        0.3
+      ],
+      "position": [
+        0.2,
+        0.45,
+        1.0
+      ]
+    },
+    {
+      "name": "Caravan",
+      "color": [
+        0.7,
+        0.58,
+        0.3
+      ],
+      "position": [
+        1.7,
+        0.45,
+        -0.4
+      ]
+    }
+  ]
+}

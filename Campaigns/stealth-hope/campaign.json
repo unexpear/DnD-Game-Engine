@@ -1,0 +1,58 @@
+{
+  "format": "dndcampaign",
+  "formatVersion": 1,
+  "id": "stealth-hope",
+  "title": "Stealth Hope",
+  "genreTags": [
+    "stealth",
+    "infiltration",
+    "stub"
+  ],
+  "ruleset": "tabletop-generic",
+  "assetsRoot": ".",
+  "entryScene": "campaign_table",
+  "entryScript": "",
+  "summary": "An infiltrator, a guard, and a contested check.",
+  "sourceNote": "Included from the platform brief so this title is not left out. This repository has no sibling survey to import, so the folder is a stub that still loads.",
+  "tableTokens": [
+    {
+      "name": "Infiltrator",
+      "color": [
+        0.25,
+        0.28,
+        0.32
+      ],
+      "position": [
+        -1.5,
+        0.45,
+        0.5
+      ]
+    },
+    {
+      "name": "Guard",
+      "color": [
+        0.62,
+        0.48,
+        0.28
+      ],
+      "position": [
+        1.4,
+        0.45,
+        0.6
+      ]
+    },
+    {
+      "name": "Objective",
+      "color": [
+        0.75,
+        0.72,
+        0.4
+      ],
+      "position": [
+        0.1,
+        0.45,
+        -0.8
+      ]
+    }
+  ]
+}

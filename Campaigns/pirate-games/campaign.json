@@ -1,0 +1,58 @@
+{
+  "format": "dndcampaign",
+  "formatVersion": 1,
+  "id": "pirate-games",
+  "title": "Pirate Games",
+  "genreTags": [
+    "pirate",
+    "sandbox",
+    "voyage"
+  ],
+  "ruleset": "tabletop-generic",
+  "assetsRoot": ".",
+  "entryScene": "campaign_table",
+  "entryScript": "",
+  "summary": "A voyage: ship, crew, and a port on the table.",
+  "sourceNote": "Pirate sandbox, framed as a campaign of voyages.",
+  "tableTokens": [
+    {
+      "name": "Ship",
+      "color": [
+        0.45,
+        0.32,
+        0.22
+      ],
+      "position": [
+        0.0,
+        0.45,
+        0.3
+      ]
+    },
+    {
+      "name": "Crew",
+      "color": [
+        0.78,
+        0.62,
+        0.4
+      ],
+      "position": [
+        -1.7,
+        0.45,
+        0.8
+      ]
+    },
+    {
+      "name": "Port",
+      "color": [
+        0.3,
+        0.55,
+        0.62
+      ],
+      "position": [
+        1.8,
+        0.45,
+        -0.5
+      ]
+    }
+  ]
+}
