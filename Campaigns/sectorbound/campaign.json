@@ -10,9 +10,10 @@
   ],
   "ruleset": "tabletop-generic",
   "assetsRoot": ".",
-  "entryScene": "campaign_table",
+  "entryScene": "sectorbound",
   "entryScript": "",
-  "summary": "A claimed sector on the table, not a voxel engine.",
+  "controlScheme": "sectorbound",
+  "summary": "Outpost yard: walk the scout, stow a marker, scan the beacon.",
   "sourceNote": "Voxel sandbox RPG. Themes come across as a campaign; the voxel sim does not.",
   "tableTokens": [
     {

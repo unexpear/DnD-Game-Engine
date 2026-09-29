@@ -101,6 +101,11 @@ int main() {
             Expect(pack->controlScheme == "rpg-hopefully", "sample pack names its controls");
             Expect(pack->ruleset == "tabletop-generic", "sample pack ruleset");
             Expect(!pack->tableTokens.empty(), "sample pack still describes its figures");
+        } else if (id == "sectorbound") {
+            Expect(pack->entryScene == "sectorbound", "sectorbound has its own scene");
+            Expect(pack->controlScheme == "sectorbound", "sectorbound names its controls");
+            Expect(pack->ruleset == "tabletop-generic", "sectorbound ruleset");
+            Expect(!pack->tableTokens.empty(), "sectorbound still describes its tokens");
         } else {
             Expect(pack->entryScene == "campaign_table", id + " uses the shared table scene");
             Expect(pack->ruleset == "tabletop-generic", id + " uses the generic ruleset");

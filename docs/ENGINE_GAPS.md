@@ -7,7 +7,7 @@ Update this file when a system lands, and keep the matching `## Gaps` section in
 ## What a pack can use today
 
 - One active manifest, one entry scene, one ruleset binding (`dnd5e` or `tabletop-generic`).
-- Allowlisted scenes: `dnd_demo` (the current maze, dice, traps, and combat), `campaign_table` (up to eight colored tokens), `rpg_hopefully` (practice yard).
+- Allowlisted scenes: `dnd_demo` (the current maze, dice, traps, and combat), `campaign_table` (up to eight colored tokens), `rpg_hopefully` (practice yard), `sectorbound` (block outpost).
 - **F3** switches tabletop orbit and an in-game camera behind a subject the scene publishes. **F8** picks the next pack and unloads the previous one.
 - A pack may set `controlScheme`. While it is not `base`, that scene reads WASD. Unload calls `ResetViewToBase`, which restores tabletop view and base D&D controls.
 - `DiceRoller` for table checks. Forward OpenGL with one spotlight list and optional occluders. Procedural cubes and quads. OBJ meshes and image textures through `AssetManager`, which packs do **not** mount.
@@ -21,7 +21,7 @@ The play path is a forward pass: meshes, a key spotlight, and maze occluders in 
 
 ### Physics
 
-`PhysicsSystem` integrates rigid bodies and resolves contacts with a spatial hash. Campaign scenes do not register it. The demo's dice checks are `DiceRoller`, not tumbling dice bodies. Missing: character controller, vehicles, buoyancy, destruction, soft bodies, voxel collision, and a query API packs can call without editing the engine scene.
+`PhysicsSystem` integrates rigid bodies and resolves contacts with a spatial hash. Campaign scenes do not register it. The demo's dice checks are `DiceRoller`, not tumbling dice bodies. Sectorbound stops its scout with a pack-local box test against a fixed list of cubes. Missing: a shared character controller, vehicles, buoyancy, destruction, soft bodies, collision against an editable voxel volume, and a query API packs can call without editing the engine scene.
 
 ### Networking
 
@@ -59,7 +59,7 @@ The original is a Bevy first-person extraction shooter. Today the pack is three 
 
 ### sectorbound
 
-A voxel sandbox needs chunk streaming, meshing, a block palette, edit tools, and collision against edited volumes. This engine has none of those. The rigid-body spatial hash is not a voxel world. There is no world save. The pack places sector, claim, and encounter tokens and stops there.
+Ships a real slice: a fixed cube outpost (floor grid, wall, crates, beacon, gate), one scout, WASD walk with a pack-local box test so walls stop the figure, F to stow a survey marker (+2) or scan the beacon (`DiceRoller` d20+bonus vs DC 12). Success lifts the gate. F3 sits behind the scout. The Sectorbound repository is not imported. Still missing: chunk streaming, greedy or voxel meshing, a block palette, place/dig tools, edits that change the volume, a world save, and collision that follows those edits. The cubes are a handmade yard. `tableTokens` describe the old sector, claim, and encounter markers; the scene does not place them.
 
 ### sandhold
 
