@@ -3,10 +3,11 @@
  * @brief Loads the active campaign into the scene manager.
  *
  * The host is the only campaign code the engine loop calls. On startup
- * it scans pack directories, registers them, and activates "dnd" unless
- * the process asked for another id. Switching packs resets a fixed set
- * of cross-scene leftovers (UI widgets, undo, editor selection, shadow
- * occluders, camera) and then constructs the pack's entry scene.
+ * it scans pack directories into a catalog and loads one pack: "dnd"
+ * unless the process asked for another id. A later pick unloads that
+ * scene, clears leftovers (UI widgets, undo, editor selection, shadow
+ * occluders, camera), and loads the new pack. The scene stack is replaced,
+ * not layered. Two campaigns are never active together.
  *
  * F8 opens a picker. --campaign=<id> selects one at launch.
  * --list-campaigns is handled in main and does not need this host.

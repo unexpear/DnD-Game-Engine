@@ -1,10 +1,10 @@
 /**
  * @file campaign_registry_test.cpp
- * @brief Headless checks for campaign discovery and session isolation.
+ * @brief Headless checks for campaign discovery and single-pack isolation.
  *
  * No window and no OpenGL. Confirms every shipped pack registers, that a
- * pack cannot escape its directory, and that switching campaigns replaces
- * session state instead of merging it into the previous pack.
+ * pack cannot escape its directory, and that the next pack replaces the
+ * previous one. One session holds one active id.
  *
  * @author DND Engine Team
  * @date 2026-09-29

@@ -2,10 +2,11 @@
  * @file campaign_ruleset.h
  * @brief Session-local binding for a compiled-in ruleset module.
  *
- * Packs name a ruleset by id. The catalog binds that id into a
- * RulesetBinding owned by the active campaign session. Bind never writes
+ * The one active pack names a ruleset by id. The catalog binds that id
+ * into a RulesetBinding owned by that pack's session. Bind never writes
  * dice tables, combat globals, or any other engine singleton. A pack
  * cannot register a new module from disk; unknown ids fail the bind.
+ * There is one binding, replaced on the next successful pick.
  *
  * @author DND Engine Team
  * @date 2026-09-29

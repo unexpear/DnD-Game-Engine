@@ -2,10 +2,11 @@
  * @file campaign_host.cpp
  * @brief Campaign scan, scene load, and the F8 pack picker.
  *
- * Switching campaigns resets UI widgets, the undo stack, editor
- * selection, spotlight occluders, and the orbit camera before the new
- * scene loads. Rules stay on the session. entryScript is recorded and
- * is not executed.
+ * One campaign is loaded at a time. A pick unloads the previous scene,
+ * resets UI widgets, the undo stack, editor selection, spotlight
+ * occluders, and the orbit camera, then loads the new pack. Rules for
+ * that pack stay on the session. entryScript is recorded and is not
+ * executed. The host never pushes a second campaign scene.
  *
  * @author DND Engine Team
  * @date 2026-09-29
@@ -81,13 +82,17 @@ b8 LoadActiveScene() {
         DND_LOG_ERROR("Campaign %s has no loadable entry scene", s_session.ActiveId().c_str());
         return false;
     }
+    // Unload whatever was playing, then own the table with this one scene.
     ResetCrossSceneState();
     s_scenes->SetActiveScene(std::move(scene));
+    if (s_scenes->GetSceneCount() != 1) {
+        DND_LOG_ERROR("Campaign load left %u scenes; expected 1", s_scenes->GetSceneCount());
+    }
     DND_LOG_INFO("Campaign active: %s (%s, ruleset %s, combat %s)",
                  s_session.ActiveId().c_str(),
                  s_session.Manifest().title.c_str(),
                  s_session.Rules().moduleId.c_str(),
-                 s_session.Rules().usesEngineCombat ? "engine" : "session-only");
+                 s_session.Rules().usesEngineCombat ? "engine" : "pack-local");
     if (!s_session.Manifest().entryScript.empty()) {
         DND_LOG_INFO("Campaign entryScript recorded and not executed: %s",
                      s_session.Manifest().entryScript.c_str());
@@ -96,13 +101,25 @@ b8 LoadActiveScene() {
 }
 
 b8 ActivateAndLoad(const std::string& id) {
+    // Already the playthrough on the table. Leave it running.
+    if (s_session.IsActive() && s_session.ActiveId() == id) {
+        return true;
+    }
+
+    const std::string previous = s_session.ActiveId();
     std::string error;
     if (!s_session.Activate(s_registry, id, error)) {
         DND_LOG_WARN("Campaign switch refused: %s", error.c_str());
         return false;
     }
     if (!LoadActiveScene()) {
-        s_session.ResetToBase();
+        // The new scene never replaced the old one. Put the previous pack back.
+        DND_LOG_ERROR("Campaign %s did not load", id.c_str());
+        if (!previous.empty() && s_session.Activate(s_registry, previous, error) && LoadActiveScene()) {
+            DND_LOG_WARN("Kept previous campaign %s", previous.c_str());
+        } else {
+            s_session.ResetToBase();
+        }
         return false;
     }
     for (i32 i = 0; i < static_cast<i32>(s_registry.All().size()); ++i) {

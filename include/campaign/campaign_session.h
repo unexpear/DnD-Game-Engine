@@ -2,11 +2,12 @@
  * @file campaign_session.h
  * @brief The one active campaign, held apart from engine globals.
  *
- * Activate replaces the session's manifest and ruleset binding as a
- * whole. A failed activate leaves the previous session in place. Reset
- * drops the session back to an empty base-safe state: no id, no tokens,
- * no combat flag. Neither operation writes engine singletons; the host
- * does that reset separately, and only with a fixed allowlist.
+ * One campaign is active. Activate replaces that pack's manifest and
+ * ruleset binding as a whole. A failed activate leaves the previous pack
+ * in place. Reset drops the session back to an empty base-safe state:
+ * no id, no tokens, no combat flag. Neither operation writes engine
+ * singletons; the host clears leftover scene state separately, and only
+ * with a fixed allowlist, when it actually swaps the scene.
  *
  * @author DND Engine Team
  * @date 2026-09-29

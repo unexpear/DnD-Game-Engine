@@ -18,4 +18,4 @@ Ruleset module: `dnd5e`. Entry scene: `dnd_demo`. `entryScript` is empty and is 
 
 ## Isolation
 
-This directory is the only content root for the pack. It cannot replace engine defaults, the D&D demo, or another pack. Switching away drops this session's manifest and ruleset binding. See [docs/CAMPAIGNS.md](../../docs/CAMPAIGNS.md).
+One campaign is on the table at a time. Choosing another pack unloads this one, then loads that pack. This folder cannot change engine defaults. See [docs/CAMPAIGNS.md](../../docs/CAMPAIGNS.md).
